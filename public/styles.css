@@ -291,6 +291,13 @@ select {
   font-weight: 600;
 }
 
+.x-range {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .icon-button {
   background: transparent;
   border: 1px solid var(--line);

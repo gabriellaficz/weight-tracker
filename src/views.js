@@ -238,6 +238,10 @@ function chartCard({ id, title, unit, hasData, emptyMessage, unitToggle }) {
     <div class="chart-card" data-chart="${escapeHtml(id)}">
       <div class="chart-title">${escapeHtml(title)} ${unitControl}</div>
       <div class="chart-body" id="chart-${escapeHtml(id)}"></div>
+      <div class="x-range">
+        <span class="x-start"></span>
+        <span class="x-end"></span>
+      </div>
     </div>
   `;
 }
@@ -734,6 +738,13 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const range = computeRange(data);
         const minX = range ? range.min : null;
         const maxX = range ? range.max : null;
+        const card = container.closest('.chart-card');
+        if (card && minX != null && maxX != null) {
+          const startEl = card.querySelector('.x-start');
+          const endEl = card.querySelector('.x-end');
+          if (startEl) startEl.textContent = monthLabel(minX);
+          if (endEl) endEl.textContent = monthLabel(maxX);
+        }
         const scale = niceScale(data.map((point) => point.y));
         chart.setOption({
           grid: { left: 48, right: 16, top: 16, bottom: 28 },
@@ -743,12 +754,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             max: maxX,
             axisLabel: {
               fontSize: 12,
-              formatter: (value) => {
-                if (value === minX || value === maxX) {
-                  return monthLabel(value);
-                }
-                return '';
-              }
+              formatter: () => ''
             }
           },
           yAxis: {
