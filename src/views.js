@@ -623,14 +623,73 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         if (!data.length) return null;
         const min = Math.min(...data.map((point) => point.x));
         const max = Math.max(...data.map((point) => point.x));
-        const start = new Date(min);
-        start.setUTCDate(1);
-        start.setUTCHours(0, 0, 0, 0);
-        const end = new Date(max);
-        end.setUTCDate(1);
-        end.setUTCHours(0, 0, 0, 0);
-        end.setUTCMonth(end.getUTCMonth() + 1);
-        return { min: start.getTime(), max: end.getTime() };
+        const span = max - min;
+        const dayMs = 24 * 60 * 60 * 1000;
+        const weekMs = 7 * dayMs;
+        const minSpan = 3 * dayMs;
+
+        const dayStart = (value) => {
+          const date = new Date(value);
+          date.setUTCHours(0, 0, 0, 0);
+          return date.getTime();
+        };
+        const dayEnd = (value) => {
+          const date = new Date(value);
+          date.setUTCHours(0, 0, 0, 0);
+          return date.getTime() + dayMs;
+        };
+        const weekStart = (value) => {
+          const date = new Date(value);
+          const day = date.getUTCDay();
+          const diff = day === 0 ? 6 : day - 1;
+          date.setUTCDate(date.getUTCDate() - diff);
+          date.setUTCHours(0, 0, 0, 0);
+          return date.getTime();
+        };
+        const weekEnd = (value) => {
+          return weekStart(value) + weekMs;
+        };
+        const monthStart = (value) => {
+          const date = new Date(value);
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+        };
+        const monthEnd = (value) => {
+          const date = new Date(value);
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1);
+        };
+        const quarterStart = (value) => {
+          const date = new Date(value);
+          const month = date.getUTCMonth();
+          const quarter = Math.floor(month / 3) * 3;
+          return Date.UTC(date.getUTCFullYear(), quarter, 1);
+        };
+        const quarterEnd = (value) => {
+          const start = new Date(quarterStart(value));
+          return Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 3, 1);
+        };
+
+        let rangeStart;
+        let rangeEnd;
+        if (span < 15 * dayMs) {
+          rangeStart = dayStart(min);
+          rangeEnd = dayEnd(max);
+          if (rangeEnd - rangeStart < minSpan) {
+            const mid = (min + max) / 2;
+            rangeStart = dayStart(mid - minSpan / 2);
+            rangeEnd = rangeStart + minSpan;
+          }
+        } else if (span < 12 * weekMs) {
+          rangeStart = weekStart(min);
+          rangeEnd = weekEnd(max);
+        } else if (span < 2 * 365 * dayMs) {
+          rangeStart = monthStart(min);
+          rangeEnd = monthEnd(max);
+        } else {
+          rangeStart = quarterStart(min);
+          rangeEnd = quarterEnd(max);
+        }
+
+        return { min: rangeStart, max: rangeEnd };
       };
       const niceNum = (range, round) => {
         const exponent = Math.floor(Math.log10(range));
