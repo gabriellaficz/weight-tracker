@@ -232,7 +232,7 @@ function chartCard({ id, title, unit, hasData, emptyMessage, unitToggle }) {
     return `<div class="chart-empty">${escapeHtml(emptyMessage || "No data yet.")}</div>`;
   }
   const unitControl = unitToggle
-    ? `<button type="button" class="unit-toggle" data-chart-toggle="${id}" data-unit="${escapeHtml(unit)}">${escapeHtml(unit)}</button>`
+    ? `<span class="unit-label">Unit</span><button type="button" class="unit-toggle" data-chart-toggle="${id}" data-unit="${escapeHtml(unit)}" aria-label="Toggle unit">${escapeHtml(unit)}</button>`
     : `<span>${escapeHtml(unit)}</span>`;
   return `
     <div class="chart-card" data-chart="${escapeHtml(id)}">
@@ -718,21 +718,30 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const max = Math.max(...values);
         const minRange = options.minRange || 0;
         const minInterval = options.minInterval || 0;
+        const minFloor = options.minFloor ?? null;
         if (min === max) {
           const base = Math.abs(min) || 1;
           const step = niceNum(base / 2, true);
           const range = Math.max(step * 4, minRange);
           const interval = Math.max(step, minInterval);
+          let minValue = min - range / 2;
+          let maxValue = max + range / 2;
+          if (minFloor != null && minValue < minFloor) {
+            minValue = minFloor;
+          }
           return {
-            min: min - range / 2,
-            max: max + range / 2,
+            min: minValue,
+            max: maxValue,
             interval
           };
         }
         const span = max - min;
         const pad = Math.max(span * 0.1, minRange ? minRange / 2 : 0);
-        const paddedMin = min - pad;
+        let paddedMin = min - pad;
         const paddedMax = max + pad;
+        if (minFloor != null && paddedMin < minFloor) {
+          paddedMin = minFloor;
+        }
         const range = niceNum(paddedMax - paddedMin, false);
         const interval = Math.max(niceNum(range / 4, true), minInterval, 1e-9);
         const niceMin = Math.floor(paddedMin / interval) * interval;
@@ -758,9 +767,11 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const scale = id === 'height'
           ? niceScale(data.map((point) => point.y), {
               minRange: unit === 'in' ? 3 : 10,
-              minInterval: unit === 'in' ? 1 : 5
+              minInterval: unit === 'in' ? 1 : 5,
+              minFloor: 0
             })
-          : niceScale(data.map((point) => point.y));
+          : niceScale(data.map((point) => point.y), { minFloor: 0 });
+        console.log('axis', id, unit, { min: scale.min, max: scale.max, interval: scale.interval });
         chart.setOption({
           grid: { left: 48, right: 16, top: 16, bottom: 28 },
           xAxis: {
@@ -818,9 +829,11 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           const scale = id === 'height'
             ? niceScale(chartPayload[id][mode].map((point) => point.y), {
                 minRange: unitConfig[id][mode].unit === 'in' ? 3 : 10,
-                minInterval: unitConfig[id][mode].unit === 'in' ? 1 : 5
+                minInterval: unitConfig[id][mode].unit === 'in' ? 1 : 5,
+                minFloor: 0
               })
-            : niceScale(chartPayload[id][mode].map((point) => point.y));
+            : niceScale(chartPayload[id][mode].map((point) => point.y), { minFloor: 0 });
+          console.log('axis', id, unitConfig[id][mode].unit, { min: scale.min, max: scale.max, interval: scale.interval });
           chart.setOption({
             xAxis: {
               min: globalRange ? globalRange.min : undefined,

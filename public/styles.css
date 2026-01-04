@@ -291,6 +291,12 @@ select {
   font-weight: 600;
 }
 
+.unit-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-right: 6px;
+}
+
 .x-range {
   display: flex;
   justify-content: space-between;
