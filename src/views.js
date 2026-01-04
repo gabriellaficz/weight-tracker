@@ -124,9 +124,9 @@ function loginView({ error }) {
   return layout({ title: "Log in", body, user: null });
 }
 
-function svgLineChart({ title, unit, points }) {
+function svgLineChart({ title, unit, points, emptyMessage }) {
   if (!points || points.length === 0) {
-    return `<div class="chart-empty">No data yet.</div>`;
+    return `<div class="chart-empty">${escapeHtml(emptyMessage || "No data yet.")}</div>`;
   }
   const width = 600;
   const height = 220;
@@ -255,6 +255,23 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
        <div class="stat"><strong>Latest percentile</strong><span>${stats.latest.percentile != null ? stats.latest.percentile.toFixed(1) + "%" : "-"}</span><span>${stats.latest.percentileCategory || ""}</span></div>`
     : "";
 
+  const weightEmpty = stats.weightSeries.length
+    ? null
+    : "Add weight entries to see this chart.";
+  const heightEmpty = stats.heightSeries.length
+    ? null
+    : "Add height entries to see this chart.";
+  const bmiEmpty = stats.bmiSeries.length
+    ? null
+    : stats.weightSeries.length && stats.heightSeries.length
+      ? "Add height on or before a weight date to compute BMI."
+      : "Add both height and weight to compute BMI.";
+  const percentileEmpty = stats.percentileSeries.length
+    ? null
+    : stats.bmiSeries.length
+      ? "Percentiles are shown for ages 2–20."
+      : "Percentiles need BMI plus age 2–20.";
+
   const body = `
     <section class="profile">
       <div>
@@ -264,10 +281,30 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <div class="stats">${latestStat}</div>
     </section>
     <section class="charts">
-      ${svgLineChart({ title: "Weight", unit: "kg", points: stats.weightSeries })}
-      ${svgLineChart({ title: "Height", unit: "cm", points: stats.heightSeries })}
-      ${svgLineChart({ title: "BMI", unit: "", points: stats.bmiSeries })}
-      ${svgLineChart({ title: "Percentile", unit: "%", points: stats.percentileSeries })}
+      ${svgLineChart({
+        title: "Weight",
+        unit: "kg",
+        points: stats.weightSeries,
+        emptyMessage: weightEmpty
+      })}
+      ${svgLineChart({
+        title: "Height",
+        unit: "cm",
+        points: stats.heightSeries,
+        emptyMessage: heightEmpty
+      })}
+      ${svgLineChart({
+        title: "BMI",
+        unit: "",
+        points: stats.bmiSeries,
+        emptyMessage: bmiEmpty
+      })}
+      ${svgLineChart({
+        title: "Percentile",
+        unit: "%",
+        points: stats.percentileSeries,
+        emptyMessage: percentileEmpty
+      })}
     </section>
     ${entryForm}
     ${profileForm}

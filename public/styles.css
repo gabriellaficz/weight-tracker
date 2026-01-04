@@ -183,6 +183,18 @@ select {
   border: 1px solid var(--line);
 }
 
+.chart-empty {
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
 .chart-title {
   font-weight: 600;
   margin-bottom: 8px;

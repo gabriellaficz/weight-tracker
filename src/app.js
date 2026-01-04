@@ -81,53 +81,79 @@ function computeStats(profile, entries) {
   const percentileSeries = [];
   let latest = null;
 
-  const heightFallback = null;
+  const entriesByDate = new Map();
+  const heightByDate = new Map();
 
   for (const entry of entries) {
-    const heightCm = entry.height_cm ?? heightFallback;
-    const bmi = bmiFromMetric(entry.weight_kg, heightCm);
-    const ageMonths = ageInMonths(
-      profile.birth_year,
-      profile.birth_month,
-      entry.entry_date
-    );
-    let percentileInfo = null;
-    if (ageMonths != null && ageMonths >= 24 && ageMonths <= 240) {
-      percentileInfo = bmiPercentile({
-        bmi,
-        ageMonths,
-        gender: profile.gender
-      });
+    const dateKey = entry.entry_date;
+    if (!entriesByDate.has(dateKey)) {
+      entriesByDate.set(dateKey, []);
     }
-    entry.bmi = bmi;
-    entry.percentile = percentileInfo ? percentileInfo.percentile : null;
-
-    if (entry.weight_kg != null) {
-      weightSeries.push({ label: entry.entry_date, value: entry.weight_kg });
-    }
+    entriesByDate.get(dateKey).push(entry);
     if (entry.height_cm != null) {
-      heightSeries.push({ label: entry.entry_date, value: entry.height_cm });
+      heightByDate.set(dateKey, entry.height_cm);
     }
-    if (bmi != null) {
-      bmiSeries.push({ label: entry.entry_date, value: bmi });
-    }
-    if (percentileInfo?.percentile != null) {
-      percentileSeries.push({
-        label: entry.entry_date,
-        value: percentileInfo.percentile
-      });
-    }
+  }
 
-    if (!latest || entry.entry_date >= latest.entry_date) {
-      latest = {
-        bmi,
-        percentile: percentileInfo?.percentile ?? null,
-        category:
-          ageMonths != null && ageMonths <= 240
-            ? bmiCategoryChild(percentileInfo?.percentile)
-            : bmiCategoryAdult(bmi),
-        percentileCategory: bmiCategoryChild(percentileInfo?.percentile)
-      };
+  const dates = Array.from(entriesByDate.keys()).sort();
+  let lastHeight = null;
+
+  for (const dateKey of dates) {
+    const heightForDate = heightByDate.get(dateKey);
+    const effectiveHeight = heightForDate != null ? heightForDate : lastHeight;
+    if (heightForDate != null) {
+      lastHeight = heightForDate;
+    }
+    const dayEntries = entriesByDate.get(dateKey);
+    for (const entry of dayEntries) {
+      const heightCm = entry.height_cm ?? effectiveHeight;
+      const bmi = bmiFromMetric(entry.weight_kg, heightCm);
+      const ageMonths = ageInMonths(
+        profile.birth_year,
+        profile.birth_month,
+        entry.entry_date
+      );
+      let percentileInfo = null;
+      if (ageMonths != null && ageMonths >= 24 && ageMonths <= 240) {
+        percentileInfo = bmiPercentile({
+          bmi,
+          ageMonths,
+          gender: profile.gender
+        });
+      }
+      entry.bmi = bmi;
+      entry.percentile = percentileInfo ? percentileInfo.percentile : null;
+
+      if (entry.weight_kg != null) {
+        weightSeries.push({ label: entry.entry_date, value: entry.weight_kg });
+      }
+      if (entry.height_cm != null) {
+        heightSeries.push({ label: entry.entry_date, value: entry.height_cm });
+      }
+      if (bmi != null) {
+        bmiSeries.push({ label: entry.entry_date, value: bmi });
+      }
+      if (percentileInfo?.percentile != null) {
+        percentileSeries.push({
+          label: entry.entry_date,
+          value: percentileInfo.percentile
+        });
+      }
+
+      if (bmi != null) {
+        latest = {
+          bmi,
+          percentile: percentileInfo?.percentile ?? null,
+          category:
+            ageMonths != null && ageMonths <= 240
+              ? bmiCategoryChild(percentileInfo?.percentile)
+              : bmiCategoryAdult(bmi),
+          percentileCategory:
+            percentileInfo?.percentile != null
+              ? bmiCategoryChild(percentileInfo.percentile)
+              : null
+        };
+      }
     }
   }
 
@@ -338,7 +364,7 @@ export async function createApp() {
         profileUser.id
       );
       const entries = await db.all(
-        "SELECT id, entry_date, weight_kg, height_cm FROM entries WHERE user_id = ? ORDER BY entry_date ASC",
+        "SELECT id, entry_date, weight_kg, height_cm FROM entries WHERE user_id = ? ORDER BY entry_date ASC, id ASC",
         profileUser.id
       );
 
@@ -443,7 +469,13 @@ export async function createApp() {
 
   app.use((err, req, res, next) => {
     console.error(err);
-    res.status(500).send("Server error");
+    const message = err?.message || "Server error";
+    const stack = err?.stack || "";
+    res
+      .status(500)
+      .send(
+        `<h1>Server error</h1><p>${message}</p><pre>${stack}</pre><p>Please copy this and send it to support.</p>`
+      );
   });
 
   return app;
