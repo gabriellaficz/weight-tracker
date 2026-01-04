@@ -50,7 +50,7 @@ function layout({ title, body, user }) {
     <nav>${authLinks}</nav>
   </header>
   <main>${body}</main>
-  <footer>Data source: CDC BMI-for-age LMS tables (bmiagerev.csv).</footer>
+  <footer>Data source: <a href="https://www.cdc.gov/growthcharts/" target="_blank" rel="noreferrer">CDC BMI-for-age LMS tables</a>.</footer>
 </body>
 </html>`;
 }
@@ -180,23 +180,21 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
     .map((entry) => {
       const bmiText = entry.bmi ? entry.bmi.toFixed(1) : "-";
       const percText = entry.percentile ? `${entry.percentile.toFixed(1)}%` : "-";
+      const weightText = entry.weight_kg != null ? `${entry.weight_kg.toFixed(1)} kg` : "-";
+      const heightText = entry.height_cm != null ? `${entry.height_cm.toFixed(1)} cm` : "-";
       return `
         <tr>
           <td>${escapeHtml(entry.entry_date)}</td>
-          <td>${entry.weight_kg ? entry.weight_kg.toFixed(1) : "-"} kg</td>
-          <td>${entry.height_cm ? entry.height_cm.toFixed(1) : "-"} cm</td>
+          <td class="compact">${weightText}</td>
+          <td class="compact">${heightText}</td>
           <td>${bmiText}</td>
           <td>${percText}</td>
           ${isOwner ? `<td>
-            <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries/${entry.id}" class="row">
-              <input type="date" name="entryDate" value="${escapeHtml(formatDateIso(entry.entry_date))}" required />
-              <input type="number" step="0.1" name="weight" value="${escapeHtml(entry.weight_kg ?? "")}" placeholder="kg" />
-              <input type="number" step="0.1" name="height" value="${escapeHtml(entry.height_cm ?? "")}" placeholder="cm" />
-              <input type="hidden" name="unit" value="metric" />
-              <button type="submit">Update</button>
-            </form>
+            <button type="button" class="icon-button" data-entry-edit data-entry-id="${entry.id}" data-entry-date="${escapeHtml(formatDateIso(entry.entry_date))}" data-entry-weight="${escapeHtml(entry.weight_kg ?? "")}" data-entry-height="${escapeHtml(entry.height_cm ?? "")}" aria-label="Edit entry">
+              <span aria-hidden="true">✎</span>
+            </button>
             <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries/${entry.id}/delete" class="inline">
-              <button type="submit" class="ghost">Delete</button>
+              <button type="submit" class="icon-button danger" aria-label="Delete entry"><span aria-hidden="true">🗑</span></button>
             </form>
           </td>` : ""}
         </tr>
@@ -208,7 +206,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
     ? `
       <section class="card">
         <h2>Add entry</h2>
-        <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries" class="stack">
+        <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries" class="stack entry-form">
           <label>Date <input type="date" name="entryDate" value="${escapeHtml(todayIso())}" required /></label>
           <label>Weight
             <div class="row">
@@ -234,29 +232,20 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
     `
     : "";
 
-  const profileForm = isOwner
+  const profileCard = isOwner
     ? `
       <section class="card">
-        <h2>Profile settings</h2>
-        <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/profile" class="stack">
-          <label>Birth month
-            <select name="birthMonth" required>
-              ${Array.from({ length: 12 }, (_, i) => {
-                const month = String(i + 1);
-                const selected = Number(profile.birth_month) === i + 1 ? "selected" : "";
-                return `<option value="${month}" ${selected}>${month}</option>`;
-              }).join("")}
-            </select>
-          </label>
-          <label>Birth year <input type="number" name="birthYear" min="1900" max="2100" required value="${escapeHtml(profile.birth_year)}" /></label>
-          <label>Gender
-            <select name="gender" required>
-              <option value="male" ${profile.gender === "male" ? "selected" : ""}>Male</option>
-              <option value="female" ${profile.gender === "female" ? "selected" : ""}>Female</option>
-            </select>
-          </label>
-          <button type="submit">Update profile</button>
-        </form>
+        <div class="card-header">
+          <h2>Profile settings</h2>
+          <button type="button" class="icon-button" data-profile-edit aria-label="Edit profile">
+            <span aria-hidden="true">✎</span>
+          </button>
+        </div>
+        <div class="profile-static">
+          <div><strong>Birth month</strong><span>${escapeHtml(profile.birth_month)}</span></div>
+          <div><strong>Birth year</strong><span>${escapeHtml(profile.birth_year)}</span></div>
+          <div><strong>Gender</strong><span>${escapeHtml(profile.gender)}</span></div>
+        </div>
       </section>
     `
     : "";
@@ -318,7 +307,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       })}
     </section>
     ${entryForm}
-    ${profileForm}
+    ${profileCard}
     <section class="card">
       <h2>Entries</h2>
       <div class="table-wrap">
@@ -337,6 +326,72 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         </table>
       </div>
     </section>
+    ${isOwner ? `
+      <dialog id="entry-edit-dialog">
+        <form method="post" class="stack" id="entry-edit-form">
+          <h3>Edit entry</h3>
+          <label>Date <input type="date" name="entryDate" required /></label>
+          <label>Weight (kg) <input type="number" step="0.1" name="weight" /></label>
+          <label>Height (cm) <input type="number" step="0.1" name="height" /></label>
+          <div class="row">
+            <button type="submit">Save</button>
+            <button type="button" class="ghost" data-dialog-close>Cancel</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="profile-edit-dialog">
+        <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/profile" class="stack">
+          <h3>Edit profile</h3>
+          <label>Birth month
+            <select name="birthMonth" required>
+              ${Array.from({ length: 12 }, (_, i) => {
+                const month = String(i + 1);
+                const selected = Number(profile.birth_month) === i + 1 ? "selected" : "";
+                return `<option value="${month}" ${selected}>${month}</option>`;
+              }).join("")}
+            </select>
+          </label>
+          <label>Birth year <input type="number" name="birthYear" min="1900" max="2100" required value="${escapeHtml(profile.birth_year)}" /></label>
+          <label>Gender
+            <select name="gender" required>
+              <option value="male" ${profile.gender === "male" ? "selected" : ""}>Male</option>
+              <option value="female" ${profile.gender === "female" ? "selected" : ""}>Female</option>
+            </select>
+          </label>
+          <div class="row">
+            <button type="submit">Save</button>
+            <button type="button" class="ghost" data-dialog-close>Cancel</button>
+          </div>
+        </form>
+      </dialog>
+      <script>
+        const entryDialog = document.getElementById('entry-edit-dialog');
+        const entryFormEl = document.getElementById('entry-edit-form');
+        document.querySelectorAll('[data-entry-edit]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const id = button.getAttribute('data-entry-id');
+            const date = button.getAttribute('data-entry-date') || '';
+            const weight = button.getAttribute('data-entry-weight') || '';
+            const height = button.getAttribute('data-entry-height') || '';
+            entryFormEl.action = '/u/${encodeURIComponent(profileUser.username)}/entries/' + id;
+            entryFormEl.querySelector('[name="entryDate"]').value = date;
+            entryFormEl.querySelector('[name="weight"]').value = weight;
+            entryFormEl.querySelector('[name="height"]').value = height;
+            entryDialog.showModal();
+          });
+        });
+        document.querySelectorAll('[data-dialog-close]').forEach((button) => {
+          button.addEventListener('click', () => {
+            button.closest('dialog').close();
+          });
+        });
+        const profileDialog = document.getElementById('profile-edit-dialog');
+        const profileButton = document.querySelector('[data-profile-edit]');
+        if (profileButton && profileDialog) {
+          profileButton.addEventListener('click', () => profileDialog.showModal());
+        }
+      </script>
+    ` : ""}
   `;
 
   return layout({ title: `${profileUser.username} · BMI`, body, user });
