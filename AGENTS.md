@@ -37,7 +37,7 @@ At startup, Codex must:
 
 If Codex ever adds additional repositories or relocates the main repo, it must update this section.
 
-**Active repository:** *(to be filled in by Codex once discovered)*
+**Active repository:** `/home/ubuntu/weight-tracker` (weight-tracker)
 
 ---
 
@@ -275,4 +275,3 @@ Before writing significant code, Codex must:
 3. Give the user a **URL they can open immediately**
 
 Speed to visible results is more important than polish.
-
