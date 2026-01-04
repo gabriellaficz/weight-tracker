@@ -45,6 +45,35 @@ function ageInMonths(birthYear, birthMonth, entryDate) {
   return total + (entry.getUTCDate() >= 15 ? 0.5 : 0);
 }
 
+function parseDateInput(value) {
+  if (!value) return null;
+  const match = String(value).trim().match(/^(\d{4})-([A-Za-z]{3})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const monthText = match[2].toLowerCase();
+  const day = Number(match[3]);
+  const months = {
+    jan: 0,
+    feb: 1,
+    mar: 2,
+    apr: 3,
+    may: 4,
+    jun: 5,
+    jul: 6,
+    aug: 7,
+    sep: 8,
+    oct: 9,
+    nov: 10,
+    dec: 11
+  };
+  const month = months[monthText];
+  if (!Number.isFinite(month) || !day || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month, day));
+  if (Number.isNaN(date.getTime())) return null;
+  const iso = date.toISOString().slice(0, 10);
+  return iso;
+}
+
 function computeStats(profile, entries) {
   const weightSeries = [];
   const heightSeries = [];
@@ -342,13 +371,17 @@ export async function createApp() {
       const { entryDate, weight, weightUnit, height, heightUnit } = req.body;
       const weightKg = toKg(weight, weightUnit || "kg");
       const heightCm = toCm(height, heightUnit || "cm");
-      if (!entryDate || !weightKg) {
-        return res.status(400).send("Date and weight are required.");
+      const parsedDate = parseDateInput(entryDate);
+      if (!parsedDate) {
+        return res.status(400).send("Date must be YYYY-MMM-DD (e.g., 2025-Jan-04).");
+      }
+      if (weightKg == null && heightCm == null) {
+        return res.status(400).send("Weight or height is required.");
       }
       const now = nowIso();
       await db.run(
         "INSERT INTO entries (user_id, entry_date, weight_kg, height_cm, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-        [user.id, entryDate, weightKg, heightCm, now, now]
+        [user.id, parsedDate, weightKg, heightCm, now, now]
       );
       res.redirect(`/u/${encodeURIComponent(username)}`);
     })
@@ -368,12 +401,16 @@ export async function createApp() {
       const { entryDate, weight, height } = req.body;
       const weightKg = weight ? Number(weight) : null;
       const heightCm = height ? Number(height) : null;
-      if (!entryDate || !weightKg) {
-        return res.status(400).send("Date and weight are required.");
+      const parsedDate = parseDateInput(entryDate);
+      if (!parsedDate) {
+        return res.status(400).send("Date must be YYYY-MMM-DD (e.g., 2025-Jan-04).");
+      }
+      if (weightKg == null && heightCm == null) {
+        return res.status(400).send("Weight or height is required.");
       }
       await db.run(
         "UPDATE entries SET entry_date = ?, weight_kg = ?, height_cm = ?, updated_at = ? WHERE id = ? AND user_id = ?",
-        [entryDate, weightKg, heightCm, nowIso(), id, user.id]
+        [parsedDate, weightKg, heightCm, nowIso(), id, user.id]
       );
       res.redirect(`/u/${encodeURIComponent(username)}`);
     })

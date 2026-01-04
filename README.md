@@ -2,6 +2,8 @@
 
 Tracks weight, height, BMI, and BMI percentiles (CDC 2-20 years) over time. Public profiles are readable by anyone, editing requires a password. Height is captured per entry.
 
+Entry dates use `YYYY-MMM-DD` (example: `2025-Jan-04`).
+
 ## Stack
 
 - Node.js 22 + Express

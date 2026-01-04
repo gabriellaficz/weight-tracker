@@ -9,7 +9,20 @@ function escapeHtml(value) {
 
 function formatDate(value) {
   if (!value) return "";
-  return new Date(value).toISOString().slice(0, 10);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getUTCFullYear();
+  const month = date.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function todayText() {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const day = String(now.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function layout({ title, body, user }) {
@@ -168,9 +181,9 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           <td>${percText}</td>
           ${isOwner ? `<td>
             <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries/${entry.id}" class="row">
-              <input type="date" name="entryDate" value="${escapeHtml(entry.entry_date)}" required />
-              <input type="number" step="0.1" name="weight" value="${escapeHtml(entry.weight_kg ?? "")}" />
-              <input type="number" step="0.1" name="height" value="${escapeHtml(entry.height_cm ?? "")}" />
+              <input type="text" name="entryDate" value="${escapeHtml(formatDate(entry.entry_date))}" placeholder="YYYY-MMM-DD" required />
+              <input type="number" step="0.1" name="weight" value="${escapeHtml(entry.weight_kg ?? "")}" placeholder="kg" />
+              <input type="number" step="0.1" name="height" value="${escapeHtml(entry.height_cm ?? "")}" placeholder="cm" />
               <input type="hidden" name="unit" value="metric" />
               <button type="submit">Update</button>
             </form>
@@ -185,17 +198,17 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <section class="card">
         <h2>Add entry</h2>
         <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries" class="stack">
-          <label>Date <input type="date" name="entryDate" required /></label>
+          <label>Date <input type="text" name="entryDate" value="${escapeHtml(todayText())}" placeholder="YYYY-MMM-DD" required /></label>
           <label>Weight
             <div class="row">
-              <input type="number" step="0.1" name="weight" required />
+              <input type="number" step="0.1" name="weight" />
               <select name="weightUnit">
                 <option value="kg">kg</option>
                 <option value="lb">lb</option>
               </select>
             </div>
           </label>
-          <label>Height (optional)
+          <label>Height
             <div class="row">
               <input type="number" step="0.1" name="height" />
               <select name="heightUnit">

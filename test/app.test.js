@@ -35,7 +35,7 @@ test("register, login, add entry, view profile", async () => {
     .set("Cookie", cookie)
     .type("form")
     .send({
-      entryDate: "2025-01-01",
+      entryDate: "2025-Jan-01",
       weight: "45",
       weightUnit: "kg",
       height: "152",
@@ -43,6 +43,18 @@ test("register, login, add entry, view profile", async () => {
     });
 
   assert.equal(addEntry.status, 302);
+
+  const addHeightOnly = await request(app)
+    .post("/u/testuser/entries")
+    .set("Cookie", cookie)
+    .type("form")
+    .send({
+      entryDate: "2025-Feb-01",
+      height: "153",
+      heightUnit: "cm"
+    });
+
+  assert.equal(addHeightOnly.status, 302);
 
   const profile = await request(app).get("/u/testuser");
   assert.equal(profile.status, 200);
