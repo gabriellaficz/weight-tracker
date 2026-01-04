@@ -37,7 +37,7 @@ At startup, Codex must:
 
 If Codex ever adds additional repositories or relocates the main repo, it must update this section.
 
-**Active repository:** *(to be filled in by Codex once discovered)*
+**Active repository:** `/home/ubuntu/weight-tracker` (weight-tracker)
 
 ---
 
@@ -79,25 +79,25 @@ This *implied assent* is the default case.
 
 ---
 
-## Web Stack (Framework‑Agnostic Placeholder)
+## Web Stack
 
-**NOTE:** The exact web framework (e.g. Next.js / React) will be chosen later. Until then:
+- Framework: **Express 4.19** (server-rendered HTML)
+- Database: **SQLite** via `better-sqlite3`
+- Tests: **node:test** + `supertest`
 
-- Codex must use a **mainstream, well‑documented Node.js web framework** it fully understands
-- The framework must support:
-  - Server‑side rendering or simple server routing
-  - SQLite
-  - Automated testing
-
-**Node version:** **Node.js 22 LTS** (installed via apt or official NodeSource)
+**Node version:** **Node.js 22 LTS**
 
 Package manager: **npm**
 
-Once a framework is selected, Codex must update this section with:
+App entrypoints:
 
-- Framework name and version
-- App entrypoints
-- Build and run commands
+- `src/server.js` (HTTP server)
+- `src/app.js` (Express app + routes)
+
+Commands:
+
+- `npm start` (run server)
+- `npm test` (light tests)
 
 ---
 
@@ -132,31 +132,11 @@ Codex must ensure:
 
 ---
 
-## Early Mandatory Step: Domain + TLS Setup
+## Domain + TLS Setup
 
-⚠️ **This is intentionally a required early step.**
+The app uses HTTPS via Let’s Encrypt and Nginx, with automatic renewal enabled.
 
-Within the **first 2–3 conversation turns**, Codex must:
-
-1. Explain (in simple terms) that many browser features require HTTPS
-2. Ask the user to obtain a **free subdomain** via:
-   - [https://freedns.afraid.org/](https://freedns.afraid.org/)
-3. Offer to walk the user step‑by‑step through:
-   - Creating an account
-   - Selecting a subdomain
-   - Pointing an A record to this server’s IP
-
-Once DNS resolves, Codex must:
-
-- Configure **Let’s Encrypt** TLS via Nginx
-- Enable automatic certificate renewal
-
-After successful setup, Codex must:
-
-- Record the subdomain here
-- Remove this placeholder warning
-
-**Active subdomain:** *(to be filled in once configured)*
+**Active subdomain:** bmi.appx.ro
 
 ---
 
@@ -275,4 +255,3 @@ Before writing significant code, Codex must:
 3. Give the user a **URL they can open immediately**
 
 Speed to visible results is more important than polish.
-
