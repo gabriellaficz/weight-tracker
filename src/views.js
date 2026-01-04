@@ -124,8 +124,8 @@ function homeView({ user }) {
   const body = `
     <section class="hero">
       <h1>My diet has failed. I will now focus on growing taller. --anon</h1>
-      <h2>Track BMI, percentile, weight, and height over time.</h2>
-      <p>Children and teens really can - keeping weight constant is just as effective when you're growing taller!</p>
+      <h2>Children and teens really can - keeping weight constant is just as effective when you're growing taller!</h2>
+      <p>Track BMI, percentile, weight, and height over time.</p>
       <div class="hero-actions">
         <a class="button" href="/register">Claim a username</a>
         <a class="button ghost" href="/login">Log in</a>
