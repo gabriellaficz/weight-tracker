@@ -792,6 +792,27 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         if (unit === '%') return Math.round(value).toString();
         return roundTo(value, decimals).toString();
       };
+      const percentileBreakpoints = [
+        { value: 5, above: 'Healthy', below: 'Underweight' },
+        { value: 85, above: 'Overweight', below: 'Healthy' },
+        { value: 95, above: 'Obese', below: 'Overweight' }
+      ];
+      const adjustPercentileRange = (values) => {
+        if (!values.length) return { min: 0, max: 1 };
+        let min = Math.min(...values);
+        let max = Math.max(...values);
+        const span = Math.max(max - min, 1);
+        const threshold = span * 0.33;
+        for (const bp of percentileBreakpoints) {
+          if (bp.value < min && min - bp.value <= threshold) {
+            min = bp.value;
+          }
+          if (bp.value > max && bp.value - max <= threshold) {
+            max = bp.value;
+          }
+        }
+        return { min, max };
+      };
       const combinedDates = chartPayload.weight.metric.concat(chartPayload.height.metric);
       const globalRange = combinedDates.length ? computeRange(combinedDates) : null;
       const buildChart = (id, data, unit, rangeOverride) => {
@@ -808,13 +829,17 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           if (startEl) startEl.textContent = monthLabel(minX);
           if (endEl) endEl.textContent = monthLabel(maxX);
         }
-        const scale = id === 'height'
+        let scale = id === 'height'
           ? niceScale(data.map((point) => point.y), {
               minRange: unit === 'in' ? 3 : 10,
               minInterval: unit === 'in' ? 1 : 5,
               minFloor: 0
             })
           : niceScale(data.map((point) => point.y), { minFloor: 0 });
+        if (id === 'percentile') {
+          const range = adjustPercentileRange(data.map((point) => point.y));
+          scale = niceScale([range.min, range.max], { minFloor: 0 });
+        }
         const decimals = Math.max(0, Math.ceil(-Math.log10(scale.interval)));
         chart.setOption({
           grid: { left: 48, right: 16, top: 16, bottom: 28 },
@@ -854,7 +879,38 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
               showSymbol: true,
               symbolSize: 6,
               lineStyle: { color: '#d16a3a', width: 2 },
-              itemStyle: { color: '#1c1b1a' }
+              itemStyle: { color: '#1c1b1a' },
+              ...(id === 'percentile'
+                ? {
+                    markLine: {
+                      symbol: 'none',
+                      lineStyle: { type: 'dashed', width: 2, color: '#8b8b8b' },
+                      label: {
+                        color: '#5c574f',
+                        fontSize: 12
+                      },
+                      data: percentileBreakpoints.flatMap((bp) => [
+                        {
+                          yAxis: bp.value,
+                          label: {
+                            formatter: bp.above,
+                            position: 'insideMiddleTop',
+                            align: 'center'
+                          }
+                        },
+                        {
+                          yAxis: bp.value,
+                          lineStyle: { opacity: 0 },
+                          label: {
+                            formatter: bp.below,
+                            position: 'insideMiddleBottom',
+                            align: 'center'
+                          }
+                        }
+                      ])
+                    }
+                  }
+                : {})
             }
           ]
         });
@@ -873,13 +929,17 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, globalRange);
             return;
           }
-          const scale = id === 'height'
+          let scale = id === 'height'
             ? niceScale(chartPayload[id][mode].map((point) => point.y), {
                 minRange: unitConfig[id][mode].unit === 'in' ? 3 : 10,
                 minInterval: unitConfig[id][mode].unit === 'in' ? 1 : 5,
                 minFloor: 0
               })
             : niceScale(chartPayload[id][mode].map((point) => point.y), { minFloor: 0 });
+          if (id === 'percentile') {
+            const range = adjustPercentileRange(chartPayload[id][mode].map((point) => point.y));
+            scale = niceScale([range.min, range.max], { minFloor: 0 });
+          }
           const decimals = Math.max(0, Math.ceil(-Math.log10(scale.interval)));
           chart.setOption({
             xAxis: {
