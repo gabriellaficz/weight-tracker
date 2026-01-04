@@ -712,25 +712,29 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         }
         return niceFraction * Math.pow(10, exponent);
       };
-      const niceScale = (values) => {
+      const niceScale = (values, options = {}) => {
         if (!values.length) return { min: 0, max: 1, interval: 1 };
         const min = Math.min(...values);
         const max = Math.max(...values);
+        const minRange = options.minRange || 0;
+        const minInterval = options.minInterval || 0;
         if (min === max) {
           const base = Math.abs(min) || 1;
           const step = niceNum(base / 2, true);
+          const range = Math.max(step * 4, minRange);
+          const interval = Math.max(step, minInterval);
           return {
-            min: min - step * 2,
-            max: max + step * 2,
-            interval: step
+            min: min - range / 2,
+            max: max + range / 2,
+            interval
           };
         }
         const span = max - min;
-        const pad = Math.max(span * 0.1, span === 0 ? 1 : 0);
+        const pad = Math.max(span * 0.1, minRange ? minRange / 2 : 0);
         const paddedMin = min - pad;
         const paddedMax = max + pad;
         const range = niceNum(paddedMax - paddedMin, false);
-        const interval = Math.max(niceNum(range / 4, true), 1e-9);
+        const interval = Math.max(niceNum(range / 4, true), minInterval, 1e-9);
         const niceMin = Math.floor(paddedMin / interval) * interval;
         const niceMax = Math.ceil(paddedMax / interval) * interval;
         return { min: niceMin, max: niceMax, interval };
@@ -751,7 +755,12 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           if (startEl) startEl.textContent = monthLabel(minX);
           if (endEl) endEl.textContent = monthLabel(maxX);
         }
-        const scale = niceScale(data.map((point) => point.y));
+        const scale = id === 'height'
+          ? niceScale(data.map((point) => point.y), {
+              minRange: unit === 'in' ? 3 : 10,
+              minInterval: unit === 'in' ? 1 : 5
+            })
+          : niceScale(data.map((point) => point.y));
         chart.setOption({
           grid: { left: 48, right: 16, top: 16, bottom: 28 },
           xAxis: {
@@ -806,7 +815,12 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, globalRange);
             return;
           }
-          const scale = niceScale(chartPayload[id][mode].map((point) => point.y));
+          const scale = id === 'height'
+            ? niceScale(chartPayload[id][mode].map((point) => point.y), {
+                minRange: unitConfig[id][mode].unit === 'in' ? 3 : 10,
+                minInterval: unitConfig[id][mode].unit === 'in' ? 1 : 5
+              })
+            : niceScale(chartPayload[id][mode].map((point) => point.y));
           chart.setOption({
             xAxis: {
               min: globalRange ? globalRange.min : undefined,
