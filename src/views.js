@@ -632,13 +632,50 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         end.setUTCMonth(end.getUTCMonth() + 1);
         return { min: start.getTime(), max: end.getTime() };
       };
-      const buildChart = (id, data, unit, step) => {
+      const niceNum = (range, round) => {
+        const exponent = Math.floor(Math.log10(range));
+        const fraction = range / Math.pow(10, exponent);
+        let niceFraction;
+        if (round) {
+          if (fraction < 1.5) niceFraction = 1;
+          else if (fraction < 3) niceFraction = 2;
+          else if (fraction < 7) niceFraction = 5;
+          else niceFraction = 10;
+        } else {
+          if (fraction <= 1) niceFraction = 1;
+          else if (fraction <= 2) niceFraction = 2;
+          else if (fraction <= 5) niceFraction = 5;
+          else niceFraction = 10;
+        }
+        return niceFraction * Math.pow(10, exponent);
+      };
+      const niceScale = (values) => {
+        if (!values.length) return { min: 0, max: 1, interval: 1 };
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        if (min === max) {
+          const base = Math.abs(min) || 1;
+          const step = niceNum(base / 2, true);
+          return {
+            min: min - step * 2,
+            max: max + step * 2,
+            interval: step
+          };
+        }
+        const range = niceNum(max - min, false);
+        const interval = niceNum(range / 4, true);
+        const niceMin = Math.floor(min / interval) * interval;
+        const niceMax = Math.ceil(max / interval) * interval;
+        return { min: niceMin, max: niceMax, interval };
+      };
+      const buildChart = (id, data, unit) => {
         const container = document.getElementById('chart-' + id);
         if (!container || !data.length) return null;
         const chart = echarts.init(container);
         const range = computeRange(data);
         const minX = range ? range.min : null;
         const maxX = range ? range.max : null;
+        const scale = niceScale(data.map((point) => point.y));
         chart.setOption({
           grid: { left: 48, right: 16, top: 16, bottom: 28 },
           xAxis: {
@@ -657,7 +694,9 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           },
           yAxis: {
             type: 'value',
-            interval: step,
+            min: scale.min,
+            max: scale.max,
+            interval: scale.interval,
             axisLabel: { fontSize: 12 }
           },
           tooltip: {
@@ -687,17 +726,18 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const button = document.querySelector('[data-chart-toggle=\"' + id + '\"]');
         if (!button) return;
         let mode = 'metric';
-        let chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, unitConfig[id][mode].step);
+        let chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit);
         button.textContent = unitConfig[id][mode].unit;
         button.addEventListener('click', () => {
           mode = mode === 'metric' ? 'imperial' : 'metric';
           button.textContent = unitConfig[id][mode].unit;
           if (!chart) {
-            chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, unitConfig[id][mode].step);
+            chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit);
             return;
           }
+          const scale = niceScale(chartPayload[id][mode].map((point) => point.y));
           chart.setOption({
-            yAxis: { interval: unitConfig[id][mode].step },
+            yAxis: { min: scale.min, max: scale.max, interval: scale.interval },
             series: [
               {
                 data: chartPayload[id][mode].map((point) => [point.x, point.y])
@@ -712,8 +752,8 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       window.addEventListener('load', () => {
         if (chartPayload.weight.metric.length) initToggleChart('weight');
         if (chartPayload.height.metric.length) initToggleChart('height');
-        if (chartPayload.bmi.length) buildChart('bmi', chartPayload.bmi, unitConfig.bmi.unit, unitConfig.bmi.step);
-        if (chartPayload.percentile.length) buildChart('percentile', chartPayload.percentile, unitConfig.percentile.unit, unitConfig.percentile.step);
+        if (chartPayload.bmi.length) buildChart('bmi', chartPayload.bmi, unitConfig.bmi.unit);
+        if (chartPayload.percentile.length) buildChart('percentile', chartPayload.percentile, unitConfig.percentile.unit);
       });
     </script>
   `;
