@@ -717,6 +717,23 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const factor = Math.pow(10, decimals);
         return Math.round(value * factor) / factor;
       };
+      const formatFeetInches = (value) => {
+        const total = Math.round(value);
+        const feet = Math.floor(total / 12);
+        const inches = total % 12;
+        return feet + "'" + inches;
+      };
+      const formatStonePounds = (value) => {
+        const total = Math.round(value);
+        const stone = Math.floor(total / 14);
+        const pounds = total % 14;
+        return stone + "st " + pounds;
+      };
+      const roundTo = (value, decimals) => {
+        if (!Number.isFinite(value)) return value;
+        const factor = Math.pow(10, decimals);
+        return Math.round(value * factor) / factor;
+      };
       const niceScale = (values, options = {}) => {
         if (!values.length) return { min: 0, max: 1, interval: 1 };
         const min = Math.min(...values);
@@ -726,9 +743,8 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const minFloor = options.minFloor ?? null;
         if (min === max) {
           const base = Math.abs(min) || 1;
-          const step = niceNum(base / 2, true);
-          const range = Math.max(step * 4, minRange);
-          const interval = Math.max(step, minInterval);
+          const range = minRange > 0 ? minRange : niceNum(base / 2, true) * 4;
+          const interval = Math.max(minInterval, niceNum(range / 4, true));
           let minValue = min - range / 2;
           let maxValue = max + range / 2;
           if (minFloor != null && minValue < minFloor) {
@@ -775,6 +791,12 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           interval: roundTo(interval, decimals)
         };
       };
+      const formatAxisValue = (unit, value, decimals) => {
+        if (unit === 'in') return formatFeetInches(value);
+        if (unit === 'lb') return formatStonePounds(value);
+        if (unit === '%') return Math.round(value).toString();
+        return roundTo(value, decimals).toString();
+      };
       const combinedDates = chartPayload.weight.metric.concat(chartPayload.height.metric);
       const globalRange = combinedDates.length ? computeRange(combinedDates) : null;
       const buildChart = (id, data, unit, rangeOverride) => {
@@ -798,6 +820,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
               minFloor: 0
             })
           : niceScale(data.map((point) => point.y), { minFloor: 0 });
+        const decimals = Math.max(0, Math.ceil(-Math.log10(scale.interval)));
         chart.setOption({
           grid: { left: 48, right: 16, top: 16, bottom: 28 },
           xAxis: {
@@ -814,15 +837,18 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             min: scale.min,
             max: scale.max,
             interval: scale.interval,
-            axisLabel: { fontSize: 12 }
+            axisLabel: {
+              fontSize: 12,
+              formatter: (value) => formatAxisValue(unit, value, decimals)
+            }
           },
           tooltip: {
             trigger: 'axis',
             formatter: (params) => {
               const point = params[0];
-              const value = Number(point.data[1]).toFixed(1);
-              const unitText = unit ? ' ' + unit : '';
-              return dateLabel(point.data[0]) + ': ' + value + unitText;
+              const value = point.data[1];
+              const unitText = unit && unit !== 'lb' && unit !== 'in' ? ' ' + unit : '';
+              return dateLabel(point.data[0]) + ': ' + formatAxisValue(unit, value, decimals) + unitText;
             }
           },
           series: [
@@ -859,12 +885,30 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
                 minFloor: 0
               })
             : niceScale(chartPayload[id][mode].map((point) => point.y), { minFloor: 0 });
+          const decimals = Math.max(0, Math.ceil(-Math.log10(scale.interval)));
           chart.setOption({
             xAxis: {
               min: globalRange ? globalRange.min : undefined,
               max: globalRange ? globalRange.max : undefined
             },
-            yAxis: { min: scale.min, max: scale.max, interval: scale.interval },
+            yAxis: {
+              min: scale.min,
+              max: scale.max,
+              interval: scale.interval,
+              axisLabel: {
+                fontSize: 12,
+                formatter: (value) => formatAxisValue(unitConfig[id][mode].unit, value, decimals)
+              }
+            },
+            tooltip: {
+              formatter: (params) => {
+                const point = params[0];
+                const value = point.data[1];
+                const unit = unitConfig[id][mode].unit;
+                const unitText = unit && unit !== 'lb' && unit !== 'in' ? ' ' + unit : '';
+                return dateLabel(point.data[0]) + ': ' + formatAxisValue(unit, value, decimals) + unitText;
+              }
+            },
             series: [
               {
                 data: chartPayload[id][mode].map((point) => [point.x, point.y])
