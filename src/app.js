@@ -48,7 +48,7 @@ function ageInMonths(birthYear, birthMonth, entryDate) {
 function parseDateInput(value) {
   if (!value) return null;
   const text = String(value).trim();
-  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{2})$/);
   const shortMatch = text.match(/^(\d{4})-([A-Za-z]{3})-(\d{2})$/);
   if (!isoMatch && !shortMatch) return null;
   const year = Number((isoMatch || shortMatch)[1]);
@@ -73,6 +73,13 @@ function parseDateInput(value) {
   if (!Number.isFinite(month) || !day || day < 1 || day > 31) return null;
   const date = new Date(Date.UTC(year, month, day));
   if (Number.isNaN(date.getTime())) return null;
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
   const iso = date.toISOString().slice(0, 10);
   return iso;
 }
@@ -146,10 +153,11 @@ function computeStats(profile, entries) {
         entry.entry_date
       );
       let percentileInfo = null;
-      if (ageMonths != null && ageMonths >= 24 && ageMonths <= 240) {
+      if (ageMonths != null && ageMonths >= 24) {
+        const percentileAge = ageMonths > 240 ? 240 : ageMonths;
         percentileInfo = bmiPercentile({
           bmi,
-          ageMonths,
+          ageMonths: percentileAge,
           gender: profile.gender
         });
       }

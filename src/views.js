@@ -7,6 +7,16 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function ordinalSuffix(value) {
+  const number = Math.round(value);
+  const mod10 = number % 10;
+  const mod100 = number % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${number}st`;
+  if (mod10 === 2 && mod100 !== 12) return `${number}nd`;
+  if (mod10 === 3 && mod100 !== 13) return `${number}rd`;
+  return `${number}th`;
+}
+
 function formatDate(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -41,6 +51,7 @@ function dateInputField({ name, value }) {
       <input type="text" name="${name}" value="${escapeHtml(textValue)}" data-date-text required />
       <button type="button" class="icon-button" data-date-open aria-label="Pick date"><span aria-hidden="true">📅</span></button>
       <input type="date" value="${escapeHtml(isoValue)}" data-date-picker />
+      <small class="hint date-hint"></small>
     </div>
   `;
 }
@@ -273,7 +284,46 @@ function svgLineChart({ title, unit, points, emptyMessage, className, yStep }) {
   `;
 }
 
+function chartCard({ id, title, unit, hasData, emptyMessage, unitToggle }) {
+  if (!hasData) {
+    return `<div class="chart-empty">${escapeHtml(emptyMessage || "No data yet.")}</div>`;
+  }
+  const unitControl = unitToggle
+    ? `<button type="button" class="unit-toggle" data-chart-toggle="${id}" data-unit="${escapeHtml(unit)}">${escapeHtml(unit)}</button>`
+    : `<span>${escapeHtml(unit)}</span>`;
+  return `
+    <div class="chart-card" data-chart="${escapeHtml(id)}">
+      <div class="chart-title">${escapeHtml(title)} ${unitControl}</div>
+      <canvas id="chart-${escapeHtml(id)}"></canvas>
+    </div>
+  `;
+}
+
 function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
+  const weightData = stats.weightSeries.map((point) => ({
+    x: point.x,
+    y: point.value
+  }));
+  const weightImperialData = stats.weightSeriesImperial.map((point) => ({
+    x: point.x,
+    y: point.value
+  }));
+  const heightData = stats.heightSeries.map((point) => ({
+    x: point.x,
+    y: point.value
+  }));
+  const heightImperialData = stats.heightSeriesImperial.map((point) => ({
+    x: point.x,
+    y: point.value
+  }));
+  const bmiData = stats.bmiSeries.map((point) => ({
+    x: point.x,
+    y: point.value
+  }));
+  const percentileData = stats.percentileSeries.map((point) => ({
+    x: point.x,
+    y: point.value
+  }));
   const entryRows = entries
     .map((entry) => {
       const bmiText = entry.bmi ? entry.bmi.toFixed(1) : "-";
@@ -325,8 +375,10 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
                 </select>
               </div>
             </label>
+            <div class="entry-actions">
+              <button type="submit">Save</button>
+            </div>
           </div>
-          <button type="submit">Save entry</button>
         </form>
       </section>
     `
@@ -342,7 +394,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           </button>
         </div>
         <div class="profile-static">
-          <div><strong>Birth month</strong><span>${escapeHtml(profile.birth_month)}</span></div>
+          <div><strong>Birth month</strong><span>${escapeHtml(new Date(Date.UTC(2000, profile.birth_month - 1, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" }))}</span></div>
           <div><strong>Birth year</strong><span>${escapeHtml(profile.birth_year)}</span></div>
           <div><strong>Gender</strong><span>${escapeHtml(profile.gender)}</span></div>
         </div>
@@ -351,8 +403,16 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
     : "";
 
   const latestStat = stats.latest
-    ? `<div class="stat"><strong>Latest BMI</strong><span>${stats.latest.bmi != null ? stats.latest.bmi.toFixed(1) : "-"}</span><span>${stats.latest.category || ""}</span></div>
-       <div class="stat"><strong>Latest percentile</strong><span>${stats.latest.percentile != null ? stats.latest.percentile.toFixed(1) + "%" : "-"}</span><span>${stats.latest.percentileCategory || ""}</span></div>`
+    ? (() => {
+        const bmiText = stats.latest.bmi != null ? stats.latest.bmi.toFixed(1) : "-";
+        const percentileText =
+          stats.latest.percentile != null
+            ? `${ordinalSuffix(stats.latest.percentile)}%ile`
+            : null;
+        const category = stats.latest.category || "";
+        const detail = percentileText ? ` (${percentileText})` : "";
+        return `<div class="stat wide"><strong>Latest BMI</strong><span>${bmiText}${detail}</span><span>${category}</span></div>`;
+      })()
     : "";
 
   const weightEmpty = stats.weightSeries.length
@@ -376,61 +436,40 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
     <section class="profile">
       <div>
         <h1>${escapeHtml(profileUser.username)}</h1>
-        <p>Birth: ${escapeHtml(profile.birth_month)}/${escapeHtml(profile.birth_year)} · ${escapeHtml(profile.gender)}</p>
+        <p>Birth: ${escapeHtml(new Date(Date.UTC(2000, profile.birth_month - 1, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" }))} ${escapeHtml(profile.birth_year)} · ${escapeHtml(profile.gender)}</p>
       </div>
       <div class="stats">${latestStat}</div>
     </section>
-    <section class="charts" data-unit="metric">
-      <div class="chart-toolbar">
-        <button type="button" class="toggle-button" data-unit-toggle>kg/cm</button>
-      </div>
-      ${svgLineChart({
+    <section class="charts">
+      ${chartCard({
+        id: "weight",
         title: "Weight",
         unit: "kg",
-        points: stats.weightSeries,
+        hasData: stats.weightSeries.length > 0,
         emptyMessage: weightEmpty,
-        className: "weight metric",
-        yStep: 1
+        unitToggle: true
       })}
-      ${svgLineChart({
-        title: "Weight",
-        unit: "lb",
-        points: stats.weightSeriesImperial,
-        emptyMessage: weightEmpty,
-        className: "weight imperial",
-        yStep: 1
-      })}
-      ${svgLineChart({
+      ${chartCard({
+        id: "height",
         title: "Height",
         unit: "cm",
-        points: stats.heightSeries,
+        hasData: stats.heightSeries.length > 0,
         emptyMessage: heightEmpty,
-        className: "height metric",
-        yStep: 10
+        unitToggle: true
       })}
-      ${svgLineChart({
-        title: "Height",
-        unit: "in",
-        points: stats.heightSeriesImperial,
-        emptyMessage: heightEmpty,
-        className: "height imperial",
-        yStep: 6
-      })}
-      ${svgLineChart({
+      ${chartCard({
+        id: "bmi",
         title: "BMI",
         unit: "",
-        points: stats.bmiSeries,
-        emptyMessage: bmiEmpty,
-        className: "bmi",
-        yStep: 1
+        hasData: stats.bmiSeries.length > 0,
+        emptyMessage: bmiEmpty
       })}
-      ${svgLineChart({
+      ${chartCard({
+        id: "percentile",
         title: "Percentile",
         unit: "%",
-        points: stats.percentileSeries,
-        emptyMessage: percentileEmpty,
-        className: "percentile",
-        yStep: 5
+        hasData: stats.percentileSeries.length > 0,
+        emptyMessage: percentileEmpty
       })}
     </section>
     ${entryForm}
@@ -495,26 +534,31 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <script>
         const entryDialog = document.getElementById('entry-edit-dialog');
         const entryFormEl = document.getElementById('entry-edit-form');
-        const monthMap = {
-          jan: '01',
-          feb: '02',
-          mar: '03',
-          apr: '04',
-          may: '05',
-          jun: '06',
-          jul: '07',
-          aug: '08',
-          sep: '09',
-          oct: '10',
-          nov: '11',
-          dec: '12'
-        };
-        const toIsoDate = (text) => {
-          const match = String(text || '').match(/^(\\d{4})-([A-Za-z]{3})-(\\d{2})$/);
-          if (!match) return '';
-          const month = monthMap[match[2].toLowerCase()];
-          if (!month) return '';
-          return match[1] + '-' + month + '-' + match[3];
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthMap = monthNames.reduce((acc, name, index) => {
+          acc[name.toLowerCase()] = String(index + 1).padStart(2, '0');
+          return acc;
+        }, {});
+        const parseDateText = (text) => {
+          const value = String(text || '').trim();
+          const match = value.match(/^(\\d{4})-([A-Za-z]{3}|\\d{1,2})-(\\d{2})$/);
+          if (!match) return null;
+          const year = Number(match[1]);
+          const monthToken = match[2];
+          const day = Number(match[3]);
+          const monthNumber = /[A-Za-z]/.test(monthToken)
+            ? monthMap[monthToken.toLowerCase()]
+            : String(Number(monthToken)).padStart(2, '0');
+          if (!monthNumber) return null;
+          const monthIndex = Number(monthNumber) - 1;
+          const date = new Date(Date.UTC(year, monthIndex, day));
+          if (Number.isNaN(date.getTime())) return null;
+          if (date.getUTCFullYear() !== year || date.getUTCMonth() !== monthIndex || date.getUTCDate() !== day) {
+            return null;
+          }
+          const normalizedText = year + '-' + monthNames[monthIndex] + '-' + String(day).padStart(2, '0');
+          const iso = year + '-' + monthNumber + '-' + String(day).padStart(2, '0');
+          return { text: normalizedText, iso };
         };
         document.querySelectorAll('[data-entry-edit]').forEach((button) => {
           button.addEventListener('click', () => {
@@ -523,8 +567,9 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             const weight = button.getAttribute('data-entry-weight') || '';
             const height = button.getAttribute('data-entry-height') || '';
             entryFormEl.action = '/u/${encodeURIComponent(profileUser.username)}/entries/' + id;
-            entryFormEl.querySelector('[data-date-text]').value = date;
-            entryFormEl.querySelector('[data-date-picker]').value = toIsoDate(date);
+            const parsed = parseDateText(date);
+            entryFormEl.querySelector('[data-date-text]').value = parsed ? parsed.text : date;
+            entryFormEl.querySelector('[data-date-picker]').value = parsed ? parsed.iso : '';
             entryFormEl.querySelector('[name="weight"]').value = weight;
             entryFormEl.querySelector('[name="height"]').value = height;
             entryDialog.showModal();
@@ -554,6 +599,40 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             textInput.value = year + '-' + month + '-' + day;
           });
         });
+        document.querySelectorAll('[data-date-text]').forEach((input) => {
+          input.addEventListener('blur', () => {
+            const field = input.closest('.date-field');
+            const hint = field.querySelector('.date-hint');
+            const result = parseDateText(input.value);
+            if (!result) {
+              hint.textContent = 'Use YYYY-MMM-DD or YYYY-MM-DD';
+              hint.className = 'hint date-hint error';
+              input.classList.add('input-error');
+              return;
+            }
+            hint.textContent = '';
+            hint.className = 'hint date-hint';
+            input.classList.remove('input-error');
+            input.value = result.text;
+            const picker = field.querySelector('[data-date-picker]');
+            picker.value = result.iso;
+          });
+        });
+        document.querySelectorAll('form').forEach((form) => {
+          form.addEventListener('submit', (event) => {
+            const input = form.querySelector('[data-date-text]');
+            if (!input) return;
+            const field = input.closest('.date-field');
+            const hint = field.querySelector('.date-hint');
+            const result = parseDateText(input.value);
+            if (!result) {
+              event.preventDefault();
+              hint.textContent = 'Use YYYY-MMM-DD or YYYY-MM-DD';
+              hint.className = 'hint date-hint error';
+              input.classList.add('input-error');
+            }
+          });
+        });
         document.querySelectorAll('[data-dialog-close]').forEach((button) => {
           button.addEventListener('click', () => {
             button.closest('dialog').close();
@@ -564,21 +643,141 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         if (profileButton && profileDialog) {
           profileButton.addEventListener('click', () => profileDialog.showModal());
         }
-        const chartSection = document.querySelector('.charts');
-        const unitToggle = document.querySelector('[data-unit-toggle]');
-        if (chartSection && unitToggle) {
-          const saved = localStorage.getItem('chartUnits') || 'metric';
-          chartSection.setAttribute('data-unit', saved);
-          unitToggle.textContent = saved === 'metric' ? 'kg/cm' : 'lb/in';
-          unitToggle.addEventListener('click', () => {
-            const next = chartSection.getAttribute('data-unit') === 'metric' ? 'imperial' : 'metric';
-            chartSection.setAttribute('data-unit', next);
-            unitToggle.textContent = next === 'metric' ? 'kg/cm' : 'lb/in';
-            localStorage.setItem('chartUnits', next);
-          });
-        }
       </script>
     ` : ""}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+    <script>
+      const chartPayload = {
+        weight: {
+          metric: ${JSON.stringify(weightData)},
+          imperial: ${JSON.stringify(weightImperialData)}
+        },
+        height: {
+          metric: ${JSON.stringify(heightData)},
+          imperial: ${JSON.stringify(heightImperialData)}
+        },
+        bmi: ${JSON.stringify(bmiData)},
+        percentile: ${JSON.stringify(percentileData)}
+      };
+      const unitConfig = {
+        weight: { metric: { unit: 'kg', step: 1 }, imperial: { unit: 'lb', step: 1 } },
+        height: { metric: { unit: 'cm', step: 10 }, imperial: { unit: 'in', step: 6 } },
+        bmi: { unit: '', step: 1 },
+        percentile: { unit: '%', step: 5 }
+      };
+      const monthLabel = (value) => {
+        const date = new Date(value);
+        return date.toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+      };
+      const dateLabel = (value) => {
+        const date = new Date(value);
+        const year = date.getUTCFullYear();
+        const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+      };
+      const computeRange = (data) => {
+        if (!data.length) return null;
+        const min = Math.min(...data.map((point) => point.x));
+        const max = Math.max(...data.map((point) => point.x));
+        const start = new Date(min);
+        start.setUTCDate(1);
+        start.setUTCHours(0, 0, 0, 0);
+        const end = new Date(max);
+        end.setUTCDate(1);
+        end.setUTCHours(0, 0, 0, 0);
+        end.setUTCMonth(end.getUTCMonth() + 1);
+        return { min: start.getTime(), max: end.getTime() };
+      };
+      const tooltipForUnit = (unit) => (context) => {
+        const value = context.parsed.y != null ? context.parsed.y.toFixed(1) : '';
+        const unitText = unit ? ' ' + unit : '';
+        return dateLabel(context.parsed.x) + ': ' + value + unitText;
+      };
+      const buildChart = (id, data, unit, step) => {
+        const canvas = document.getElementById('chart-' + id);
+        if (!canvas || !data.length) return null;
+        const range = computeRange(data);
+        return new Chart(canvas, {
+          type: 'line',
+          data: {
+            datasets: [
+              {
+                data,
+                borderColor: '#d16a3a',
+                backgroundColor: 'rgba(209, 106, 58, 0.1)',
+                pointRadius: 3,
+                tension: 0.2
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: { label: tooltipForUnit(unit) }
+              }
+            },
+            scales: {
+              x: {
+                type: 'time',
+                min: range ? range.min : undefined,
+                max: range ? range.max : undefined,
+                time: { unit: 'month' },
+                ticks: {
+                  maxRotation: 0,
+                  autoSkip: true,
+                  callback: (value, index, ticks) => {
+                    if (index === 0 || index === ticks.length - 1) {
+                      return monthLabel(value);
+                    }
+                    return '';
+                  },
+                  font: { size: 12 }
+                }
+              },
+              y: {
+                ticks: {
+                  stepSize: step,
+                  font: { size: 12 }
+                }
+              }
+            }
+          }
+        });
+      };
+      const initToggleChart = (id) => {
+        const button = document.querySelector('[data-chart-toggle=\"' + id + '\"]');
+        if (!button) return;
+        let mode = 'metric';
+        let chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, unitConfig[id][mode].step);
+        button.textContent = unitConfig[id][mode].unit;
+        button.addEventListener('click', () => {
+          mode = mode === 'metric' ? 'imperial' : 'metric';
+          button.textContent = unitConfig[id][mode].unit;
+          if (!chart) {
+            chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, unitConfig[id][mode].step);
+            return;
+          }
+          chart.data.datasets[0].data = chartPayload[id][mode];
+          chart.options.scales.y.ticks.stepSize = unitConfig[id][mode].step;
+          const range = computeRange(chartPayload[id][mode]);
+          chart.options.scales.x.min = range ? range.min : undefined;
+          chart.options.scales.x.max = range ? range.max : undefined;
+          chart.options.plugins.tooltip.callbacks.label = tooltipForUnit(unitConfig[id][mode].unit);
+          chart.update();
+        });
+      };
+      window.addEventListener('load', () => {
+        if (chartPayload.weight.metric.length) initToggleChart('weight');
+        if (chartPayload.height.metric.length) initToggleChart('height');
+        if (chartPayload.bmi.length) buildChart('bmi', chartPayload.bmi, unitConfig.bmi.unit, unitConfig.bmi.step);
+        if (chartPayload.percentile.length) buildChart('percentile', chartPayload.percentile, unitConfig.percentile.unit, unitConfig.percentile.step);
+      });
+    </script>
   `;
 
   return layout({ title: `${profileUser.username} · BMI`, body, user });
