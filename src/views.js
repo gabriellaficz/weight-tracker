@@ -123,7 +123,7 @@ function layout({ title, body, user }) {
 function homeView({ user }) {
   const body = `
     <section class="hero">
-      <h1>My diet has failed. I will now focus on growing taller. --anon</h1>
+      <h1>"My diet has failed. I will now focus on growing taller." --anon</h1>
       <h2>Children and teens really can - keeping weight constant is just as effective when you're growing taller!</h2>
       <p>Track BMI, percentile, weight, and height over time.</p>
       <div class="hero-actions">
