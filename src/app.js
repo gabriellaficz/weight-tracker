@@ -8,7 +8,7 @@ import { openDb, applyMigrations } from "./db.js";
 import {
   bmiFromMetric,
   bmiPercentile,
-  bmiCategoryAdult,
+  bmiCategoryByAge,
   bmiCategoryChild
 } from "./bmi.js";
 import { homeView, loginView, registerView, profileView } from "./views.js";
@@ -236,10 +236,7 @@ function computeStats(profile, entries) {
       latest = {
         bmi,
         percentile: percentileInfo?.percentile ?? null,
-        category:
-          ageMonths != null && ageMonths <= 240
-            ? bmiCategoryChild(percentileInfo?.percentile)
-            : bmiCategoryAdult(bmi),
+        category: bmiCategoryByAge({ bmi, ageMonths, gender: profile.gender }),
         percentileCategory:
           percentileInfo?.percentile != null
             ? bmiCategoryChild(percentileInfo.percentile)
