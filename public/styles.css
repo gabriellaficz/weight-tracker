@@ -96,6 +96,12 @@ button {
   border: 1px solid #fff;
 }
 
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
 button:hover,
 .button:hover {
   transform: translateY(-1px);

@@ -17,12 +17,16 @@ function formatDate(value) {
   return `${year}-${month}-${day}`;
 }
 
-function todayText() {
+function formatDateIso(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function todayIso() {
   const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = now.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
-  const day = String(now.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return now.toISOString().slice(0, 10);
 }
 
 function layout({ title, body, user }) {
@@ -135,10 +139,14 @@ function svgLineChart({ title, unit, points, emptyMessage }) {
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  const xStep = (width - padding * 2) / (points.length - 1 || 1);
-  const scaled = points.map((point, index) => {
-    const x = padding + index * xStep;
-    const y = padding + (height - padding * 2) * (1 - (point.value - min) / range);
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const xRange = maxX - minX || 1;
+  const scaled = points.map((point) => {
+    const x =
+      padding + ((point.x - minX) / xRange) * (width - padding * 2);
+    const y =
+      padding + (height - padding * 2) * (1 - (point.value - min) / range);
     return { x, y, label: point.label, value: point.value };
   });
   const path = scaled.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
@@ -181,11 +189,14 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           <td>${percText}</td>
           ${isOwner ? `<td>
             <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries/${entry.id}" class="row">
-              <input type="text" name="entryDate" value="${escapeHtml(formatDate(entry.entry_date))}" placeholder="YYYY-MMM-DD" required />
+              <input type="date" name="entryDate" value="${escapeHtml(formatDateIso(entry.entry_date))}" required />
               <input type="number" step="0.1" name="weight" value="${escapeHtml(entry.weight_kg ?? "")}" placeholder="kg" />
               <input type="number" step="0.1" name="height" value="${escapeHtml(entry.height_cm ?? "")}" placeholder="cm" />
               <input type="hidden" name="unit" value="metric" />
               <button type="submit">Update</button>
+            </form>
+            <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries/${entry.id}/delete" class="inline">
+              <button type="submit" class="ghost">Delete</button>
             </form>
           </td>` : ""}
         </tr>
@@ -198,7 +209,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <section class="card">
         <h2>Add entry</h2>
         <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries" class="stack">
-          <label>Date <input type="text" name="entryDate" value="${escapeHtml(todayText())}" placeholder="YYYY-MMM-DD" required /></label>
+          <label>Date <input type="date" name="entryDate" value="${escapeHtml(todayIso())}" required /></label>
           <label>Weight
             <div class="row">
               <input type="number" step="0.1" name="weight" />
@@ -319,7 +330,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
               <th>Height</th>
               <th>BMI</th>
               <th>Percentile</th>
-              ${isOwner ? "<th>Edit</th>" : ""}
+              ${isOwner ? "<th>Actions</th>" : ""}
             </tr>
           </thead>
           <tbody>${entryRows || "<tr><td colspan=\"6\">No entries yet.</td></tr>"}</tbody>

@@ -56,10 +56,22 @@ test("register, login, add entry, view profile", async () => {
 
   assert.equal(addHeightOnly.status, 302);
 
-  const profile = await request(app).get("/u/testuser");
+  const profile = await request(app)
+    .get("/u/testuser")
+    .set("Cookie", cookie);
   assert.equal(profile.status, 200);
   assert.match(profile.text, /testuser/);
   assert.match(profile.text, /BMI/);
+
+  const match = profile.text.match(/entries\/(\d+)\/delete/);
+  assert.ok(match, "Expected delete link in profile");
+  const entryId = match[1];
+
+  const deleteEntry = await request(app)
+    .post(`/u/testuser/entries/${entryId}/delete`)
+    .set("Cookie", cookie);
+
+  assert.equal(deleteEntry.status, 302);
 
   fs.rmSync(dir, { recursive: true, force: true });
 });

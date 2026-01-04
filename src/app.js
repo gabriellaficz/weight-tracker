@@ -47,11 +47,12 @@ function ageInMonths(birthYear, birthMonth, entryDate) {
 
 function parseDateInput(value) {
   if (!value) return null;
-  const match = String(value).trim().match(/^(\d{4})-([A-Za-z]{3})-(\d{2})$/);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const monthText = match[2].toLowerCase();
-  const day = Number(match[3]);
+  const text = String(value).trim();
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const shortMatch = text.match(/^(\d{4})-([A-Za-z]{3})-(\d{2})$/);
+  if (!isoMatch && !shortMatch) return null;
+  const year = Number((isoMatch || shortMatch)[1]);
+  const day = Number((isoMatch || shortMatch)[3]);
   const months = {
     jan: 0,
     feb: 1,
@@ -66,12 +67,32 @@ function parseDateInput(value) {
     nov: 10,
     dec: 11
   };
-  const month = months[monthText];
+  const month = isoMatch
+    ? Number(isoMatch[2]) - 1
+    : months[shortMatch[2].toLowerCase()];
   if (!Number.isFinite(month) || !day || day < 1 || day > 31) return null;
   const date = new Date(Date.UTC(year, month, day));
   if (Number.isNaN(date.getTime())) return null;
   const iso = date.toISOString().slice(0, 10);
   return iso;
+}
+
+function dateToUtcTimestamp(dateKey, hourOffset) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return Date.UTC(year, month - 1, day, hourOffset, 0, 0);
+}
+
+function distributeTimestamps(dateKey, count) {
+  if (count <= 0) return [];
+  if (count === 1) {
+    return [dateToUtcTimestamp(dateKey, 12)];
+  }
+  const start = 6;
+  const end = 18;
+  const step = (end - start) / (count - 1);
+  return Array.from({ length: count }, (_, i) =>
+    dateToUtcTimestamp(dateKey, start + step * i)
+  );
 }
 
 function computeStats(profile, entries) {
@@ -99,12 +120,21 @@ function computeStats(profile, entries) {
   let lastHeight = null;
 
   for (const dateKey of dates) {
+    const dayEntries = entriesByDate.get(dateKey).slice().sort((a, b) => {
+      if (a.updated_at === b.updated_at) return a.id - b.id;
+      return a.updated_at.localeCompare(b.updated_at);
+    });
     const heightForDate = heightByDate.get(dateKey);
     const effectiveHeight = heightForDate != null ? heightForDate : lastHeight;
     if (heightForDate != null) {
       lastHeight = heightForDate;
     }
-    const dayEntries = entriesByDate.get(dateKey);
+
+    const weightEntries = dayEntries.filter((entry) => entry.weight_kg != null);
+    const heightEntries = dayEntries.filter((entry) => entry.height_cm != null);
+    const weightTimes = distributeTimestamps(dateKey, weightEntries.length);
+    const heightTimes = distributeTimestamps(dateKey, heightEntries.length);
+
     for (const entry of dayEntries) {
       const heightCm = entry.height_cm ?? effectiveHeight;
       const bmi = bmiFromMetric(entry.weight_kg, heightCm);
@@ -125,18 +155,35 @@ function computeStats(profile, entries) {
       entry.percentile = percentileInfo ? percentileInfo.percentile : null;
 
       if (entry.weight_kg != null) {
-        weightSeries.push({ label: entry.entry_date, value: entry.weight_kg });
+        const idx = weightEntries.indexOf(entry);
+        const x = weightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
+        weightSeries.push({
+          label: entry.entry_date,
+          value: entry.weight_kg,
+          x
+        });
       }
       if (entry.height_cm != null) {
-        heightSeries.push({ label: entry.entry_date, value: entry.height_cm });
+        const idx = heightEntries.indexOf(entry);
+        const x = heightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
+        heightSeries.push({
+          label: entry.entry_date,
+          value: entry.height_cm,
+          x
+        });
       }
       if (bmi != null) {
-        bmiSeries.push({ label: entry.entry_date, value: bmi });
+        const idx = weightEntries.indexOf(entry);
+        const x = weightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
+        bmiSeries.push({ label: entry.entry_date, value: bmi, x });
       }
       if (percentileInfo?.percentile != null) {
+        const idx = weightEntries.indexOf(entry);
+        const x = weightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
         percentileSeries.push({
           label: entry.entry_date,
-          value: percentileInfo.percentile
+          value: percentileInfo.percentile,
+          x
         });
       }
 
@@ -364,7 +411,7 @@ export async function createApp() {
         profileUser.id
       );
       const entries = await db.all(
-        "SELECT id, entry_date, weight_kg, height_cm FROM entries WHERE user_id = ? ORDER BY entry_date ASC, id ASC",
+        "SELECT id, entry_date, weight_kg, height_cm, created_at, updated_at FROM entries WHERE user_id = ? ORDER BY entry_date ASC, updated_at ASC, id ASC",
         profileUser.id
       );
 
@@ -399,7 +446,9 @@ export async function createApp() {
       const heightCm = toCm(height, heightUnit || "cm");
       const parsedDate = parseDateInput(entryDate);
       if (!parsedDate) {
-        return res.status(400).send("Date must be YYYY-MMM-DD (e.g., 2025-Jan-04).");
+        return res
+          .status(400)
+          .send("Date must be YYYY-MM-DD (or YYYY-MMM-DD).");
       }
       if (weightKg == null && heightCm == null) {
         return res.status(400).send("Weight or height is required.");
@@ -429,7 +478,9 @@ export async function createApp() {
       const heightCm = height ? Number(height) : null;
       const parsedDate = parseDateInput(entryDate);
       if (!parsedDate) {
-        return res.status(400).send("Date must be YYYY-MMM-DD (e.g., 2025-Jan-04).");
+        return res
+          .status(400)
+          .send("Date must be YYYY-MM-DD (or YYYY-MMM-DD).");
       }
       if (weightKg == null && heightCm == null) {
         return res.status(400).send("Weight or height is required.");
@@ -437,6 +488,25 @@ export async function createApp() {
       await db.run(
         "UPDATE entries SET entry_date = ?, weight_kg = ?, height_cm = ?, updated_at = ? WHERE id = ? AND user_id = ?",
         [parsedDate, weightKg, heightCm, nowIso(), id, user.id]
+      );
+      res.redirect(`/u/${encodeURIComponent(username)}`);
+    })
+  );
+
+  app.post(
+    "/u/:username/entries/:id/delete",
+    asyncHandler(async (req, res) => {
+      const { username, id } = req.params;
+      const user = await db.get(
+        "SELECT id FROM users WHERE username = ?",
+        username
+      );
+      if (!user || !req.user || req.user.id !== user.id) {
+        return res.status(403).send("Not allowed");
+      }
+      await db.run(
+        "DELETE FROM entries WHERE id = ? AND user_id = ?",
+        [id, user.id]
       );
       res.redirect(`/u/${encodeURIComponent(username)}`);
     })
