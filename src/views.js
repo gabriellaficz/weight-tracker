@@ -802,7 +802,13 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         if (!values.length) return { min: 0, max: 1 };
         let min = Math.min(...values);
         let max = Math.max(...values);
-        const span = Math.max(max - min, 1);
+        let span = max - min;
+        if (span < 3) {
+          const mid = (min + max) / 2;
+          min = mid - 1.5;
+          max = mid + 1.5;
+          span = max - min;
+        }
         const threshold = span * 0.33;
         for (const bp of percentileBreakpoints) {
           if (bp.value < min && min - bp.value <= threshold) {
