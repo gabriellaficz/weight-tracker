@@ -132,31 +132,11 @@ Codex must ensure:
 
 ---
 
-## Early Mandatory Step: Domain + TLS Setup
+## Domain + TLS Setup
 
-⚠️ **This is intentionally a required early step.**
+The app uses HTTPS via Let’s Encrypt and Nginx, with automatic renewal enabled.
 
-Within the **first 2–3 conversation turns**, Codex must:
-
-1. Explain (in simple terms) that many browser features require HTTPS
-2. Ask the user to obtain a **free subdomain** via:
-   - [https://freedns.afraid.org/](https://freedns.afraid.org/)
-3. Offer to walk the user step‑by‑step through:
-   - Creating an account
-   - Selecting a subdomain
-   - Pointing an A record to this server’s IP
-
-Once DNS resolves, Codex must:
-
-- Configure **Let’s Encrypt** TLS via Nginx
-- Enable automatic certificate renewal
-
-After successful setup, Codex must:
-
-- Record the subdomain here
-- Remove this placeholder warning
-
-**Active subdomain:** *(to be filled in once configured)*
+**Active subdomain:** bmi.appx.ro
 
 ---
 
