@@ -725,17 +725,23 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             interval: step
           };
         }
-        const range = niceNum(max - min, false);
-        const interval = niceNum(range / 4, true);
-        const niceMin = Math.floor(min / interval) * interval;
-        const niceMax = Math.ceil(max / interval) * interval;
+        const span = max - min;
+        const pad = Math.max(span * 0.1, span === 0 ? 1 : 0);
+        const paddedMin = min - pad;
+        const paddedMax = max + pad;
+        const range = niceNum(paddedMax - paddedMin, false);
+        const interval = Math.max(niceNum(range / 4, true), 1e-9);
+        const niceMin = Math.floor(paddedMin / interval) * interval;
+        const niceMax = Math.ceil(paddedMax / interval) * interval;
         return { min: niceMin, max: niceMax, interval };
       };
-      const buildChart = (id, data, unit) => {
+      const combinedDates = chartPayload.weight.metric.concat(chartPayload.height.metric);
+      const globalRange = combinedDates.length ? computeRange(combinedDates) : null;
+      const buildChart = (id, data, unit, rangeOverride) => {
         const container = document.getElementById('chart-' + id);
         if (!container || !data.length) return null;
         const chart = echarts.init(container);
-        const range = computeRange(data);
+        const range = rangeOverride || computeRange(data);
         const minX = range ? range.min : null;
         const maxX = range ? range.max : null;
         const card = container.closest('.chart-card');
@@ -791,17 +797,21 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const button = document.querySelector('[data-chart-toggle=\"' + id + '\"]');
         if (!button) return;
         let mode = 'metric';
-        let chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit);
+        let chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, globalRange);
         button.textContent = unitConfig[id][mode].unit;
         button.addEventListener('click', () => {
           mode = mode === 'metric' ? 'imperial' : 'metric';
           button.textContent = unitConfig[id][mode].unit;
           if (!chart) {
-            chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit);
+            chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, globalRange);
             return;
           }
           const scale = niceScale(chartPayload[id][mode].map((point) => point.y));
           chart.setOption({
+            xAxis: {
+              min: globalRange ? globalRange.min : undefined,
+              max: globalRange ? globalRange.max : undefined
+            },
             yAxis: { min: scale.min, max: scale.max, interval: scale.interval },
             series: [
               {
@@ -817,8 +827,8 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       window.addEventListener('load', () => {
         if (chartPayload.weight.metric.length) initToggleChart('weight');
         if (chartPayload.height.metric.length) initToggleChart('height');
-        if (chartPayload.bmi.length) buildChart('bmi', chartPayload.bmi, unitConfig.bmi.unit);
-        if (chartPayload.percentile.length) buildChart('percentile', chartPayload.percentile, unitConfig.percentile.unit);
+        if (chartPayload.bmi.length) buildChart('bmi', chartPayload.bmi, unitConfig.bmi.unit, globalRange);
+        if (chartPayload.percentile.length) buildChart('percentile', chartPayload.percentile, unitConfig.percentile.unit, globalRange);
       });
     </script>
   `;
