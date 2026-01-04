@@ -24,9 +24,63 @@ function formatDateIso(value) {
   return date.toISOString().slice(0, 10);
 }
 
+function todayText() {
+  return formatDate(new Date().toISOString());
+}
+
 function todayIso() {
   const now = new Date();
   return now.toISOString().slice(0, 10);
+}
+
+function dateInputField({ name, value }) {
+  const textValue = value ? formatDate(value) : todayText();
+  const isoValue = value ? formatDateIso(value) : todayIso();
+  return `
+    <div class="date-field">
+      <input type="text" name="${name}" value="${escapeHtml(textValue)}" data-date-text required />
+      <button type="button" class="icon-button" data-date-open aria-label="Pick date"><span aria-hidden="true">📅</span></button>
+      <input type="date" value="${escapeHtml(isoValue)}" data-date-picker />
+    </div>
+  `;
+}
+
+function monthKeyFromTimestamp(timestamp) {
+  const date = new Date(timestamp);
+  const year = date.getUTCFullYear();
+  const month = date.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  return `${month} ${year}`;
+}
+
+function floorToMonth(timestamp) {
+  const date = new Date(timestamp);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+}
+
+function ceilToNextMonth(timestamp) {
+  const date = new Date(timestamp);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1);
+}
+
+function monthTicks(start, end) {
+  const ticks = [];
+  let cursor = new Date(start);
+  const endDate = new Date(end);
+  while (cursor <= endDate) {
+    ticks.push(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return ticks;
+}
+
+function yTicks(minValue, maxValue, step) {
+  const start = Math.floor(minValue / step) * step;
+  const end = Math.ceil(maxValue / step) * step;
+  const ticks = [];
+  for (let value = start; value <= end; value += step) {
+    ticks.push(value);
+  }
+  return ticks;
 }
 
 function layout({ title, body, user }) {
@@ -86,7 +140,10 @@ function registerView({ errors = [], values = {} }) {
       <h1>Claim a username</h1>
       ${errorList}
       <form method="post" action="/register" class="stack">
-        <label>Username <input name="username" required value="${escapeHtml(values.username || "")}" /></label>
+        <label>Username
+          <input name="username" id="username-input" required value="${escapeHtml(values.username || "")}" />
+          <small id="username-status" class="hint"></small>
+        </label>
         <label>Password <input type="password" name="password" required /></label>
         <label>Birth month
           <select name="birthMonth" required>
@@ -94,7 +151,8 @@ function registerView({ errors = [], values = {} }) {
             ${Array.from({ length: 12 }, (_, i) => {
               const month = String(i + 1);
               const selected = values.birthMonth === month ? "selected" : "";
-              return `<option value="${month}" ${selected}>${month}</option>`;
+              const label = new Date(Date.UTC(2000, i, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+              return `<option value="${month}" ${selected}>${label}</option>`;
             }).join("")}
           </select>
         </label>
@@ -108,6 +166,32 @@ function registerView({ errors = [], values = {} }) {
         </label>
         <button type="submit">Create profile</button>
       </form>
+      <script>
+        const nameInput = document.getElementById('username-input');
+        const statusEl = document.getElementById('username-status');
+        if (nameInput && statusEl) {
+          nameInput.addEventListener('blur', async () => {
+            const value = nameInput.value.trim();
+            statusEl.textContent = '';
+            statusEl.className = 'hint';
+            if (value.length < 3) return;
+            try {
+              const res = await fetch('/api/username-available?username=' + encodeURIComponent(value));
+              const data = await res.json();
+              if (data.available) {
+                statusEl.textContent = 'Available';
+                statusEl.className = 'hint ok';
+              } else {
+                statusEl.textContent = 'Taken';
+                statusEl.className = 'hint error';
+              }
+            } catch (error) {
+              statusEl.textContent = 'Unable to check';
+              statusEl.className = 'hint error';
+            }
+          });
+        }
+      </script>
     </section>
   `;
   return layout({ title: "Register", body, user: null });
@@ -128,49 +212,63 @@ function loginView({ error }) {
   return layout({ title: "Log in", body, user: null });
 }
 
-function svgLineChart({ title, unit, points, emptyMessage }) {
+function svgLineChart({ title, unit, points, emptyMessage, className, yStep }) {
   if (!points || points.length === 0) {
     return `<div class="chart-empty">${escapeHtml(emptyMessage || "No data yet.")}</div>`;
   }
   const width = 600;
   const height = 220;
-  const padding = 30;
+  const padding = 36;
   const values = points.map((point) => point.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  const minX = Math.min(...points.map((point) => point.x));
-  const maxX = Math.max(...points.map((point) => point.x));
+  const dataMinX = Math.min(...points.map((point) => point.x));
+  const dataMaxX = Math.max(...points.map((point) => point.x));
+  const minX = floorToMonth(dataMinX);
+  const maxX = ceilToNextMonth(dataMaxX);
   const xRange = maxX - minX || 1;
   const scaled = points.map((point) => {
     const x =
       padding + ((point.x - minX) / xRange) * (width - padding * 2);
     const y =
       padding + (height - padding * 2) * (1 - (point.value - min) / range);
-    return { x, y, label: point.label, value: point.value };
+    return { x, y, value: point.value };
   });
   const path = scaled.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
-  const circles = scaled
-    .map(
-      (point) =>
-        `<circle cx="${point.x}" cy="${point.y}" r="3" /><text x="${point.x}" y="${point.y - 8}">${point.value.toFixed(1)}</text>`
-    )
+  const ticks = monthTicks(minX, maxX);
+  const xTicks = ticks
+    .map((tick) => {
+      const x =
+        padding + ((tick - minX) / xRange) * (width - padding * 2);
+      return `<line class="tick" x1="${x}" x2="${x}" y1="${height - padding}" y2="${height - padding + 6}" />`;
+    })
     .join("");
-  const labels = scaled
-    .map(
-      (point) =>
-        `<text class="x-label" x="${point.x}" y="${height - 8}">${escapeHtml(point.label)}</text>`
-    )
+  const yTickStep = yStep || range / 4 || 1;
+  const yTickValues = yTicks(min, max, yTickStep);
+  const yTicksSvg = yTickValues
+    .map((value) => {
+      const y =
+        padding + (height - padding * 2) * (1 - (value - min) / range);
+      return `<line class="tick" x1="${padding - 6}" x2="${padding}" y1="${y}" y2="${y}" />
+        <text class="y-label" x="${padding - 10}" y="${y + 4}">${Number.isInteger(value) ? value : value.toFixed(1)}</text>`;
+    })
     .join("");
+  const axisLabels = `
+    <text class="x-edge" x="${padding}" y="${height - 8}">${monthKeyFromTimestamp(minX)}</text>
+    <text class="x-edge" x="${width - padding}" y="${height - 8}" text-anchor="end">${monthKeyFromTimestamp(maxX)}</text>
+  `;
   return `
-    <div class="chart">
+    <div class="chart ${className || ""}">
       <div class="chart-title">${escapeHtml(title)} <span>${escapeHtml(unit)}</span></div>
       <svg viewBox="0 0 ${width} ${height}" role="img">
+        <line class="axis" x1="${padding}" x2="${padding}" y1="${padding}" y2="${height - padding}" />
+        <line class="axis" x1="${padding}" x2="${width - padding}" y1="${height - padding}" y2="${height - padding}" />
+        ${xTicks}
+        ${yTicksSvg}
         <path d="${path}" />
-        ${circles}
-        ${labels}
       </svg>
-      <div class="chart-range">min ${min.toFixed(1)} ${escapeHtml(unit)} · max ${max.toFixed(1)} ${escapeHtml(unit)}</div>
+      ${axisLabels}
     </div>
   `;
 }
@@ -184,13 +282,13 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       const heightText = entry.height_cm != null ? `${entry.height_cm.toFixed(1)} cm` : "-";
       return `
         <tr>
-          <td>${escapeHtml(entry.entry_date)}</td>
+          <td>${escapeHtml(formatDate(entry.entry_date))}</td>
           <td class="compact">${weightText}</td>
           <td class="compact">${heightText}</td>
           <td>${bmiText}</td>
           <td>${percText}</td>
           ${isOwner ? `<td>
-            <button type="button" class="icon-button" data-entry-edit data-entry-id="${entry.id}" data-entry-date="${escapeHtml(formatDateIso(entry.entry_date))}" data-entry-weight="${escapeHtml(entry.weight_kg ?? "")}" data-entry-height="${escapeHtml(entry.height_cm ?? "")}" aria-label="Edit entry">
+            <button type="button" class="icon-button" data-entry-edit data-entry-id="${entry.id}" data-entry-date="${escapeHtml(formatDate(entry.entry_date))}" data-entry-weight="${escapeHtml(entry.weight_kg ?? "")}" data-entry-height="${escapeHtml(entry.height_cm ?? "")}" aria-label="Edit entry">
               <span aria-hidden="true">✎</span>
             </button>
             <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries/${entry.id}/delete" class="inline">
@@ -207,25 +305,27 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <section class="card">
         <h2>Add entry</h2>
         <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/entries" class="stack entry-form">
-          <label>Date <input type="date" name="entryDate" value="${escapeHtml(todayIso())}" required /></label>
-          <label>Weight
-            <div class="row">
-              <input type="number" step="0.1" name="weight" />
-              <select name="weightUnit">
-                <option value="kg">kg</option>
-                <option value="lb">lb</option>
-              </select>
-            </div>
-          </label>
-          <label>Height
-            <div class="row">
-              <input type="number" step="0.1" name="height" />
-              <select name="heightUnit">
-                <option value="cm">cm</option>
-                <option value="in">in</option>
-              </select>
-            </div>
-          </label>
+          <div class="entry-row">
+            <label>Date ${dateInputField({ name: "entryDate" })}</label>
+            <label>Weight
+              <div class="row">
+                <input type="number" step="0.1" name="weight" />
+                <select name="weightUnit">
+                  <option value="kg">kg</option>
+                  <option value="lb">lb</option>
+                </select>
+              </div>
+            </label>
+            <label>Height
+              <div class="row">
+                <input type="number" step="0.1" name="height" />
+                <select name="heightUnit">
+                  <option value="cm">cm</option>
+                  <option value="in">in</option>
+                </select>
+              </div>
+            </label>
+          </div>
           <button type="submit">Save entry</button>
         </form>
       </section>
@@ -280,30 +380,57 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       </div>
       <div class="stats">${latestStat}</div>
     </section>
-    <section class="charts">
+    <section class="charts" data-unit="metric">
+      <div class="chart-toolbar">
+        <button type="button" class="toggle-button" data-unit-toggle>kg/cm</button>
+      </div>
       ${svgLineChart({
         title: "Weight",
         unit: "kg",
         points: stats.weightSeries,
-        emptyMessage: weightEmpty
+        emptyMessage: weightEmpty,
+        className: "weight metric",
+        yStep: 1
+      })}
+      ${svgLineChart({
+        title: "Weight",
+        unit: "lb",
+        points: stats.weightSeriesImperial,
+        emptyMessage: weightEmpty,
+        className: "weight imperial",
+        yStep: 1
       })}
       ${svgLineChart({
         title: "Height",
         unit: "cm",
         points: stats.heightSeries,
-        emptyMessage: heightEmpty
+        emptyMessage: heightEmpty,
+        className: "height metric",
+        yStep: 10
+      })}
+      ${svgLineChart({
+        title: "Height",
+        unit: "in",
+        points: stats.heightSeriesImperial,
+        emptyMessage: heightEmpty,
+        className: "height imperial",
+        yStep: 6
       })}
       ${svgLineChart({
         title: "BMI",
         unit: "",
         points: stats.bmiSeries,
-        emptyMessage: bmiEmpty
+        emptyMessage: bmiEmpty,
+        className: "bmi",
+        yStep: 1
       })}
       ${svgLineChart({
         title: "Percentile",
         unit: "%",
         points: stats.percentileSeries,
-        emptyMessage: percentileEmpty
+        emptyMessage: percentileEmpty,
+        className: "percentile",
+        yStep: 5
       })}
     </section>
     ${entryForm}
@@ -330,7 +457,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <dialog id="entry-edit-dialog">
         <form method="post" class="stack" id="entry-edit-form">
           <h3>Edit entry</h3>
-          <label>Date <input type="date" name="entryDate" required /></label>
+          <label>Date ${dateInputField({ name: "entryDate", value: null })}</label>
           <label>Weight (kg) <input type="number" step="0.1" name="weight" /></label>
           <label>Height (cm) <input type="number" step="0.1" name="height" /></label>
           <div class="row">
@@ -347,7 +474,8 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
               ${Array.from({ length: 12 }, (_, i) => {
                 const month = String(i + 1);
                 const selected = Number(profile.birth_month) === i + 1 ? "selected" : "";
-                return `<option value="${month}" ${selected}>${month}</option>`;
+                const label = new Date(Date.UTC(2000, i, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+                return `<option value="${month}" ${selected}>${label}</option>`;
               }).join("")}
             </select>
           </label>
@@ -367,6 +495,27 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <script>
         const entryDialog = document.getElementById('entry-edit-dialog');
         const entryFormEl = document.getElementById('entry-edit-form');
+        const monthMap = {
+          jan: '01',
+          feb: '02',
+          mar: '03',
+          apr: '04',
+          may: '05',
+          jun: '06',
+          jul: '07',
+          aug: '08',
+          sep: '09',
+          oct: '10',
+          nov: '11',
+          dec: '12'
+        };
+        const toIsoDate = (text) => {
+          const match = String(text || '').match(/^(\\d{4})-([A-Za-z]{3})-(\\d{2})$/);
+          if (!match) return '';
+          const month = monthMap[match[2].toLowerCase()];
+          if (!month) return '';
+          return match[1] + '-' + month + '-' + match[3];
+        };
         document.querySelectorAll('[data-entry-edit]').forEach((button) => {
           button.addEventListener('click', () => {
             const id = button.getAttribute('data-entry-id');
@@ -374,10 +523,35 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             const weight = button.getAttribute('data-entry-weight') || '';
             const height = button.getAttribute('data-entry-height') || '';
             entryFormEl.action = '/u/${encodeURIComponent(profileUser.username)}/entries/' + id;
-            entryFormEl.querySelector('[name="entryDate"]').value = date;
+            entryFormEl.querySelector('[data-date-text]').value = date;
+            entryFormEl.querySelector('[data-date-picker]').value = toIsoDate(date);
             entryFormEl.querySelector('[name="weight"]').value = weight;
             entryFormEl.querySelector('[name="height"]').value = height;
             entryDialog.showModal();
+          });
+        });
+        document.querySelectorAll('[data-date-open]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const field = button.closest('.date-field');
+            const picker = field.querySelector('[data-date-picker]');
+            if (picker.showPicker) {
+              picker.showPicker();
+            } else {
+              picker.focus();
+            }
+          });
+        });
+        document.querySelectorAll('[data-date-picker]').forEach((picker) => {
+          picker.addEventListener('change', () => {
+            const field = picker.closest('.date-field');
+            const textInput = field.querySelector('[data-date-text]');
+            const value = picker.value;
+            if (!value) return;
+            const date = new Date(value + 'T00:00:00Z');
+            const year = date.getUTCFullYear();
+            const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            textInput.value = year + '-' + month + '-' + day;
           });
         });
         document.querySelectorAll('[data-dialog-close]').forEach((button) => {
@@ -389,6 +563,19 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const profileButton = document.querySelector('[data-profile-edit]');
         if (profileButton && profileDialog) {
           profileButton.addEventListener('click', () => profileDialog.showModal());
+        }
+        const chartSection = document.querySelector('.charts');
+        const unitToggle = document.querySelector('[data-unit-toggle]');
+        if (chartSection && unitToggle) {
+          const saved = localStorage.getItem('chartUnits') || 'metric';
+          chartSection.setAttribute('data-unit', saved);
+          unitToggle.textContent = saved === 'metric' ? 'kg/cm' : 'lb/in';
+          unitToggle.addEventListener('click', () => {
+            const next = chartSection.getAttribute('data-unit') === 'metric' ? 'imperial' : 'metric';
+            chartSection.setAttribute('data-unit', next);
+            unitToggle.textContent = next === 'metric' ? 'kg/cm' : 'lb/in';
+            localStorage.setItem('chartUnits', next);
+          });
         }
       </script>
     ` : ""}

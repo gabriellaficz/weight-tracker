@@ -140,8 +140,32 @@ select {
   align-items: center;
 }
 
+.entry-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.entry-row > label {
+  min-width: 200px;
+  flex: 1 1 200px;
+}
+
 .inline {
   display: inline;
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.hint.ok {
+  color: #1b7a3a;
+}
+
+.hint.error {
+  color: #9f2e2e;
 }
 
 .card-header {
@@ -209,6 +233,26 @@ select {
   margin-top: 24px;
 }
 
+.chart-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.toggle-button {
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.charts[data-unit="metric"] .chart.imperial,
+.charts[data-unit="imperial"] .chart.metric {
+  display: none;
+}
+
 .chart {
   background: #fff;
   border-radius: 16px;
@@ -255,14 +299,30 @@ select {
   fill: var(--muted);
 }
 
-.chart text.x-label {
-  text-anchor: middle;
-}
-
 .chart-range {
   font-size: 0.8rem;
   color: var(--muted);
   margin-top: 8px;
+}
+
+.chart .axis {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.chart .tick {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart .y-label {
+  text-anchor: end;
+  font-size: 0.7rem;
+}
+
+.chart .x-edge {
+  font-size: 0.75rem;
+  fill: var(--muted);
 }
 
 .icon-button {
@@ -280,7 +340,24 @@ select {
   color: #9f2e2e;
 }
 
-.entry-form input[type="date"],
+.date-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.date-field input[type="text"] {
+  width: 140px;
+}
+
+.date-field input[type="date"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+
 .entry-form input[type="number"] {
   width: 140px;
 }

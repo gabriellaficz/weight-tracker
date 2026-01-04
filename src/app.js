@@ -97,7 +97,9 @@ function distributeTimestamps(dateKey, count) {
 
 function computeStats(profile, entries) {
   const weightSeries = [];
+  const weightSeriesImperial = [];
   const heightSeries = [];
+  const heightSeriesImperial = [];
   const bmiSeries = [];
   const percentileSeries = [];
   let latest = null;
@@ -162,6 +164,11 @@ function computeStats(profile, entries) {
           value: entry.weight_kg,
           x
         });
+        weightSeriesImperial.push({
+          label: entry.entry_date,
+          value: entry.weight_kg * 2.20462262,
+          x
+        });
       }
       if (entry.height_cm != null) {
         const idx = heightEntries.indexOf(entry);
@@ -169,6 +176,11 @@ function computeStats(profile, entries) {
         heightSeries.push({
           label: entry.entry_date,
           value: entry.height_cm,
+          x
+        });
+        heightSeriesImperial.push({
+          label: entry.entry_date,
+          value: entry.height_cm * 0.393700787,
           x
         });
       }
@@ -204,7 +216,15 @@ function computeStats(profile, entries) {
     }
   }
 
-  return { weightSeries, heightSeries, bmiSeries, percentileSeries, latest };
+  return {
+    weightSeries,
+    weightSeriesImperial,
+    heightSeries,
+    heightSeriesImperial,
+    bmiSeries,
+    percentileSeries,
+    latest
+  };
 }
 
 function asyncHandler(handler) {
@@ -253,6 +273,21 @@ export async function createApp() {
   app.get("/", (req, res) => {
     res.send(homeView({ user: req.user }));
   });
+
+  app.get(
+    "/api/username-available",
+    asyncHandler(async (req, res) => {
+      const username = String(req.query.username || "").trim();
+      if (!username || !/^[a-zA-Z0-9_-]{3,20}$/.test(username)) {
+        return res.json({ available: false });
+      }
+      const existing = await db.get(
+        "SELECT id FROM users WHERE username = ?",
+        username
+      );
+      res.json({ available: !existing });
+    })
+  );
 
   app.get("/register", (req, res) => {
     res.send(registerView({}));
