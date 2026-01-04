@@ -24,9 +24,7 @@ test("register, login, add entry, view profile", async () => {
       password: "secret123",
       birthMonth: "6",
       birthYear: "2012",
-      gender: "female",
-      height: "150",
-      heightUnit: "cm"
+      gender: "female"
     });
 
   assert.equal(register.status, 302);

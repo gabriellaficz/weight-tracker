@@ -52,7 +52,7 @@ function computeStats(profile, entries) {
   const percentileSeries = [];
   let latest = null;
 
-  const heightFallback = profile.height_cm;
+  const heightFallback = null;
 
   for (const entry of entries) {
     const heightCm = entry.height_cm ?? heightFallback;
@@ -159,15 +159,7 @@ export async function createApp() {
   app.post(
     "/register",
     asyncHandler(async (req, res) => {
-      const {
-        username,
-        password,
-        birthMonth,
-        birthYear,
-        gender,
-        height,
-        heightUnit
-      } = req.body;
+      const { username, password, birthMonth, birthYear, gender } = req.body;
       const errors = [];
       if (!username || !/^[a-zA-Z0-9_-]{3,20}$/.test(username)) {
         errors.push("Username must be 3-20 characters (letters, numbers, _ or -).");
@@ -187,25 +179,13 @@ export async function createApp() {
         errors.push("Gender must be selected.");
       }
 
-      const heightCm = toCm(height, heightUnit || "cm");
-      if (!heightCm || heightCm <= 0) {
-        errors.push("Height is required.");
-      }
-
       if (errors.length) {
         return res
           .status(400)
           .send(
             registerView({
               errors,
-              values: {
-                username,
-                birthMonth,
-                birthYear,
-                gender,
-                height,
-                heightUnit
-              }
+              values: { username, birthMonth, birthYear, gender }
             })
           );
       }
@@ -220,14 +200,7 @@ export async function createApp() {
           .send(
             registerView({
               errors: ["Username is already taken."],
-              values: {
-                username,
-                birthMonth,
-                birthYear,
-                gender,
-                height,
-                heightUnit
-              }
+              values: { username, birthMonth, birthYear, gender }
             })
           );
       }
@@ -244,7 +217,7 @@ export async function createApp() {
         userId = result.lastID;
         await db.run(
           "INSERT INTO profiles (user_id, birth_month, birth_year, gender, height_cm, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [userId, month, year, gender, heightCm, createdAt, createdAt]
+          [userId, month, year, gender, null, createdAt, createdAt]
         );
         await db.exec("COMMIT");
       } catch (error) {
@@ -417,16 +390,15 @@ export async function createApp() {
       if (!user || !req.user || req.user.id !== user.id) {
         return res.status(403).send("Not allowed");
       }
-      const { birthMonth, birthYear, gender, height, heightUnit } = req.body;
+      const { birthMonth, birthYear, gender } = req.body;
       const month = Number(birthMonth);
       const year = Number(birthYear);
-      const heightCm = toCm(height, heightUnit || "cm");
       if (!month || !year || (gender !== "male" && gender !== "female")) {
         return res.status(400).send("Invalid profile data.");
       }
       await db.run(
         "UPDATE profiles SET birth_month = ?, birth_year = ?, gender = ?, height_cm = ?, updated_at = ? WHERE user_id = ?",
-        [month, year, gender, heightCm, nowIso(), user.id]
+        [month, year, gender, null, nowIso(), user.id]
       );
       res.redirect(`/u/${encodeURIComponent(username)}`);
     })

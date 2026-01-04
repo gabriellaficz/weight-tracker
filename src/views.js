@@ -71,7 +71,16 @@ function registerView({ errors = [], values = {} }) {
       <form method="post" action="/register" class="stack">
         <label>Username <input name="username" required value="${escapeHtml(values.username || "")}" /></label>
         <label>Password <input type="password" name="password" required /></label>
-        <label>Birth month <input type="number" name="birthMonth" min="1" max="12" required value="${escapeHtml(values.birthMonth || "")}" /></label>
+        <label>Birth month
+          <select name="birthMonth" required>
+            <option value="">Select</option>
+            ${Array.from({ length: 12 }, (_, i) => {
+              const month = String(i + 1);
+              const selected = values.birthMonth === month ? "selected" : "";
+              return `<option value="${month}" ${selected}>${month}</option>`;
+            }).join("")}
+          </select>
+        </label>
         <label>Birth year <input type="number" name="birthYear" min="1900" max="2100" required value="${escapeHtml(values.birthYear || "")}" /></label>
         <label>Gender
           <select name="gender" required>
@@ -79,15 +88,6 @@ function registerView({ errors = [], values = {} }) {
             <option value="male" ${values.gender === "male" ? "selected" : ""}>Male</option>
             <option value="female" ${values.gender === "female" ? "selected" : ""}>Female</option>
           </select>
-        </label>
-        <label>Height
-          <div class="row">
-            <input type="number" step="0.1" name="height" required value="${escapeHtml(values.height || "")}" />
-            <select name="heightUnit">
-              <option value="cm" ${values.heightUnit === "cm" ? "selected" : ""}>cm</option>
-              <option value="in" ${values.heightUnit === "in" ? "selected" : ""}>in</option>
-            </select>
-          </div>
         </label>
         <button type="submit">Create profile</button>
       </form>
@@ -215,22 +215,21 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <section class="card">
         <h2>Profile settings</h2>
         <form method="post" action="/u/${encodeURIComponent(profileUser.username)}/profile" class="stack">
-          <label>Birth month <input type="number" name="birthMonth" min="1" max="12" required value="${escapeHtml(profile.birth_month)}" /></label>
+          <label>Birth month
+            <select name="birthMonth" required>
+              ${Array.from({ length: 12 }, (_, i) => {
+                const month = String(i + 1);
+                const selected = Number(profile.birth_month) === i + 1 ? "selected" : "";
+                return `<option value="${month}" ${selected}>${month}</option>`;
+              }).join("")}
+            </select>
+          </label>
           <label>Birth year <input type="number" name="birthYear" min="1900" max="2100" required value="${escapeHtml(profile.birth_year)}" /></label>
           <label>Gender
             <select name="gender" required>
               <option value="male" ${profile.gender === "male" ? "selected" : ""}>Male</option>
               <option value="female" ${profile.gender === "female" ? "selected" : ""}>Female</option>
             </select>
-          </label>
-          <label>Height
-            <div class="row">
-              <input type="number" step="0.1" name="height" value="${escapeHtml(profile.height_cm ?? "")}" />
-              <select name="heightUnit">
-                <option value="cm">cm</option>
-                <option value="in">in</option>
-              </select>
-            </div>
           </label>
           <button type="submit">Update profile</button>
         </form>
@@ -248,7 +247,6 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       <div>
         <h1>${escapeHtml(profileUser.username)}</h1>
         <p>Birth: ${escapeHtml(profile.birth_month)}/${escapeHtml(profile.birth_year)} · ${escapeHtml(profile.gender)}</p>
-        <p>Default height: ${profile.height_cm ? profile.height_cm.toFixed(1) + " cm" : "Not set"}</p>
       </div>
       <div class="stats">${latestStat}</div>
     </section>

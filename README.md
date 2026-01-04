@@ -1,6 +1,6 @@
 # BMI Tracker
 
-Tracks weight, height, BMI, and BMI percentiles (CDC 2-20 years) over time. Public profiles are readable by anyone, editing requires a password.
+Tracks weight, height, BMI, and BMI percentiles (CDC 2-20 years) over time. Public profiles are readable by anyone, editing requires a password. Height is captured per entry.
 
 ## Stack
 
