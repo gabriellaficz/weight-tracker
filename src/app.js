@@ -112,7 +112,6 @@ function computeStats(profile, entries) {
   let latest = null;
 
   const entriesByDate = new Map();
-  const heightByDate = new Map();
 
   for (const entry of entries) {
     const dateKey = entry.entry_date;
@@ -120,53 +119,38 @@ function computeStats(profile, entries) {
       entriesByDate.set(dateKey, []);
     }
     entriesByDate.get(dateKey).push(entry);
-    if (entry.height_cm != null) {
-      heightByDate.set(dateKey, entry.height_cm);
-    }
   }
 
   const dates = Array.from(entriesByDate.keys()).sort();
-  let lastHeight = null;
+  const entryX = new Map();
+  const combinedPoints = [];
+  const weightPoints = [];
+  const heightPoints = [];
 
   for (const dateKey of dates) {
     const dayEntries = entriesByDate.get(dateKey).slice().sort((a, b) => {
       if (a.updated_at === b.updated_at) return a.id - b.id;
       return a.updated_at.localeCompare(b.updated_at);
     });
-    const heightForDate = heightByDate.get(dateKey);
-    const effectiveHeight = heightForDate != null ? heightForDate : lastHeight;
-    if (heightForDate != null) {
-      lastHeight = heightForDate;
-    }
-
     const weightEntries = dayEntries.filter((entry) => entry.weight_kg != null);
     const heightEntries = dayEntries.filter((entry) => entry.height_cm != null);
     const weightTimes = distributeTimestamps(dateKey, weightEntries.length);
     const heightTimes = distributeTimestamps(dateKey, heightEntries.length);
 
     for (const entry of dayEntries) {
-      const heightCm = entry.height_cm ?? effectiveHeight;
-      const bmi = bmiFromMetric(entry.weight_kg, heightCm);
-      const ageMonths = ageInMonths(
-        profile.birth_year,
-        profile.birth_month,
-        entry.entry_date
-      );
-      let percentileInfo = null;
-      if (ageMonths != null && ageMonths >= 24) {
-        const percentileAge = ageMonths > 240 ? 240 : ageMonths;
-        percentileInfo = bmiPercentile({
-          bmi,
-          ageMonths: percentileAge,
-          gender: profile.gender
-        });
-      }
-      entry.bmi = bmi;
-      entry.percentile = percentileInfo ? percentileInfo.percentile : null;
-
+      let x = null;
       if (entry.weight_kg != null) {
         const idx = weightEntries.indexOf(entry);
-        const x = weightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
+        x = weightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
+      } else if (entry.height_cm != null) {
+        const idx = heightEntries.indexOf(entry);
+        x = heightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
+      }
+      if (x == null) continue;
+      entryX.set(entry.id, x);
+      combinedPoints.push({ entry, x });
+      if (entry.weight_kg != null) {
+        weightPoints.push({ x, value: entry.weight_kg });
         weightSeries.push({
           label: entry.entry_date,
           value: entry.weight_kg,
@@ -179,8 +163,7 @@ function computeStats(profile, entries) {
         });
       }
       if (entry.height_cm != null) {
-        const idx = heightEntries.indexOf(entry);
-        const x = heightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
+        heightPoints.push({ x, value: entry.height_cm });
         heightSeries.push({
           label: entry.entry_date,
           value: entry.height_cm,
@@ -192,35 +175,76 @@ function computeStats(profile, entries) {
           x
         });
       }
-      if (bmi != null) {
-        const idx = weightEntries.indexOf(entry);
-        const x = weightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
-        bmiSeries.push({ label: entry.entry_date, value: bmi, x });
-      }
-      if (percentileInfo?.percentile != null) {
-        const idx = weightEntries.indexOf(entry);
-        const x = weightTimes[idx] ?? dateToUtcTimestamp(dateKey, 12);
-        percentileSeries.push({
-          label: entry.entry_date,
-          value: percentileInfo.percentile,
-          x
-        });
-      }
+    }
+  }
 
-      if (bmi != null) {
-        latest = {
-          bmi,
-          percentile: percentileInfo?.percentile ?? null,
-          category:
-            ageMonths != null && ageMonths <= 240
-              ? bmiCategoryChild(percentileInfo?.percentile)
-              : bmiCategoryAdult(bmi),
-          percentileCategory:
-            percentileInfo?.percentile != null
-              ? bmiCategoryChild(percentileInfo.percentile)
-              : null
-        };
-      }
+  const interpolateAt = (points, x) => {
+    if (!points.length) return null;
+    const sorted = points.slice().sort((a, b) => a.x - b.x);
+    if (x <= sorted[0].x) return sorted[0].value;
+    if (x >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].value;
+    let left = 0;
+    let right = sorted.length - 1;
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      const midX = sorted[mid].x;
+      if (midX === x) return sorted[mid].value;
+      if (midX < x) left = mid + 1;
+      else right = mid - 1;
+    }
+    const lower = sorted[right];
+    const upper = sorted[left];
+    const span = upper.x - lower.x;
+    const ratio = span === 0 ? 0 : (x - lower.x) / span;
+    return lower.value + (upper.value - lower.value) * ratio;
+  };
+
+  const combinedSorted = combinedPoints.slice().sort((a, b) => a.x - b.x);
+  for (const point of combinedSorted) {
+    const entry = point.entry;
+    const x = point.x;
+    const weightAt = interpolateAt(weightPoints, x);
+    const heightAt = interpolateAt(heightPoints, x);
+    const bmi = bmiFromMetric(weightAt, heightAt);
+    const ageMonths = ageInMonths(
+      profile.birth_year,
+      profile.birth_month,
+      entry.entry_date
+    );
+    let percentileInfo = null;
+    if (ageMonths != null && ageMonths >= 24) {
+      const percentileAge = ageMonths > 240 ? 240 : ageMonths;
+      percentileInfo = bmiPercentile({
+        bmi,
+        ageMonths: percentileAge,
+        gender: profile.gender
+      });
+    }
+    entry.bmi = bmi;
+    entry.percentile = percentileInfo ? percentileInfo.percentile : null;
+    if (bmi != null) {
+      bmiSeries.push({ label: entry.entry_date, value: bmi, x });
+    }
+    if (percentileInfo?.percentile != null) {
+      percentileSeries.push({
+        label: entry.entry_date,
+        value: percentileInfo.percentile,
+        x
+      });
+    }
+    if (bmi != null) {
+      latest = {
+        bmi,
+        percentile: percentileInfo?.percentile ?? null,
+        category:
+          ageMonths != null && ageMonths <= 240
+            ? bmiCategoryChild(percentileInfo?.percentile)
+            : bmiCategoryAdult(bmi),
+        percentileCategory:
+          percentileInfo?.percentile != null
+            ? bmiCategoryChild(percentileInfo.percentile)
+            : null
+      };
     }
   }
 
