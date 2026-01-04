@@ -251,8 +251,8 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
     : "";
 
   const latestStat = stats.latest
-    ? `<div class="stat"><strong>Latest BMI</strong><span>${stats.latest.bmi.toFixed(1)}</span><span>${stats.latest.category}</span></div>
-       <div class="stat"><strong>Latest percentile</strong><span>${stats.latest.percentile ? stats.latest.percentile.toFixed(1) + "%" : "-"}</span><span>${stats.latest.percentileCategory || ""}</span></div>`
+    ? `<div class="stat"><strong>Latest BMI</strong><span>${stats.latest.bmi != null ? stats.latest.bmi.toFixed(1) : "-"}</span><span>${stats.latest.category || ""}</span></div>
+       <div class="stat"><strong>Latest percentile</strong><span>${stats.latest.percentile != null ? stats.latest.percentile.toFixed(1) + "%" : "-"}</span><span>${stats.latest.percentileCategory || ""}</span></div>`
     : "";
 
   const body = `
