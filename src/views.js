@@ -712,11 +712,6 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         }
         return niceFraction * Math.pow(10, exponent);
       };
-      const roundTo = (value, decimals) => {
-        if (!Number.isFinite(value)) return value;
-        const factor = Math.pow(10, decimals);
-        return Math.round(value * factor) / factor;
-      };
       const formatFeetInches = (value) => {
         const total = Math.round(value);
         const feet = Math.floor(total / 12);
