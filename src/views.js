@@ -223,65 +223,8 @@ function loginView({ error }) {
   return layout({ title: "Log in", body, user: null });
 }
 
-function svgLineChart({ title, unit, points, emptyMessage, className, yStep }) {
-  if (!points || points.length === 0) {
-    return `<div class="chart-empty">${escapeHtml(emptyMessage || "No data yet.")}</div>`;
-  }
-  const width = 600;
-  const height = 220;
-  const padding = 36;
-  const values = points.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const dataMinX = Math.min(...points.map((point) => point.x));
-  const dataMaxX = Math.max(...points.map((point) => point.x));
-  const minX = floorToMonth(dataMinX);
-  const maxX = ceilToNextMonth(dataMaxX);
-  const xRange = maxX - minX || 1;
-  const scaled = points.map((point) => {
-    const x =
-      padding + ((point.x - minX) / xRange) * (width - padding * 2);
-    const y =
-      padding + (height - padding * 2) * (1 - (point.value - min) / range);
-    return { x, y, value: point.value };
-  });
-  const path = scaled.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
-  const ticks = monthTicks(minX, maxX);
-  const xTicks = ticks
-    .map((tick) => {
-      const x =
-        padding + ((tick - minX) / xRange) * (width - padding * 2);
-      return `<line class="tick" x1="${x}" x2="${x}" y1="${height - padding}" y2="${height - padding + 6}" />`;
-    })
-    .join("");
-  const yTickStep = yStep || range / 4 || 1;
-  const yTickValues = yTicks(min, max, yTickStep);
-  const yTicksSvg = yTickValues
-    .map((value) => {
-      const y =
-        padding + (height - padding * 2) * (1 - (value - min) / range);
-      return `<line class="tick" x1="${padding - 6}" x2="${padding}" y1="${y}" y2="${y}" />
-        <text class="y-label" x="${padding - 10}" y="${y + 4}">${Number.isInteger(value) ? value : value.toFixed(1)}</text>`;
-    })
-    .join("");
-  const axisLabels = `
-    <text class="x-edge" x="${padding}" y="${height - 8}">${monthKeyFromTimestamp(minX)}</text>
-    <text class="x-edge" x="${width - padding}" y="${height - 8}" text-anchor="end">${monthKeyFromTimestamp(maxX)}</text>
-  `;
-  return `
-    <div class="chart ${className || ""}">
-      <div class="chart-title">${escapeHtml(title)} <span>${escapeHtml(unit)}</span></div>
-      <svg viewBox="0 0 ${width} ${height}" role="img">
-        <line class="axis" x1="${padding}" x2="${padding}" y1="${padding}" y2="${height - padding}" />
-        <line class="axis" x1="${padding}" x2="${width - padding}" y1="${height - padding}" y2="${height - padding}" />
-        ${xTicks}
-        ${yTicksSvg}
-        <path d="${path}" />
-      </svg>
-      ${axisLabels}
-    </div>
-  `;
+function svgLineChart() {
+  return "";
 }
 
 function chartCard({ id, title, unit, hasData, emptyMessage, unitToggle }) {
@@ -294,7 +237,7 @@ function chartCard({ id, title, unit, hasData, emptyMessage, unitToggle }) {
   return `
     <div class="chart-card" data-chart="${escapeHtml(id)}">
       <div class="chart-title">${escapeHtml(title)} ${unitControl}</div>
-      <canvas id="chart-${escapeHtml(id)}"></canvas>
+      <div class="chart-body" id="chart-${escapeHtml(id)}"></div>
     </div>
   `;
 }
@@ -645,8 +588,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         }
       </script>
     ` : ""}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <script>
       const chartPayload = {
         weight: {
@@ -690,92 +632,128 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         end.setUTCMonth(end.getUTCMonth() + 1);
         return { min: start.getTime(), max: end.getTime() };
       };
-      const tooltipForUnit = (unit) => (context) => {
-        const value = context.parsed.y != null ? context.parsed.y.toFixed(1) : '';
-        const unitText = unit ? ' ' + unit : '';
-        return dateLabel(context.parsed.x) + ': ' + value + unitText;
+      const niceNum = (range, round) => {
+        const exponent = Math.floor(Math.log10(range));
+        const fraction = range / Math.pow(10, exponent);
+        let niceFraction;
+        if (round) {
+          if (fraction < 1.5) niceFraction = 1;
+          else if (fraction < 3) niceFraction = 2;
+          else if (fraction < 7) niceFraction = 5;
+          else niceFraction = 10;
+        } else {
+          if (fraction <= 1) niceFraction = 1;
+          else if (fraction <= 2) niceFraction = 2;
+          else if (fraction <= 5) niceFraction = 5;
+          else niceFraction = 10;
+        }
+        return niceFraction * Math.pow(10, exponent);
       };
-      const buildChart = (id, data, unit, step) => {
-        const canvas = document.getElementById('chart-' + id);
-        if (!canvas || !data.length) return null;
+      const niceScale = (values) => {
+        if (!values.length) return { min: 0, max: 1, interval: 1 };
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        if (min === max) {
+          const base = Math.abs(min) || 1;
+          const step = niceNum(base / 2, true);
+          return {
+            min: min - step * 2,
+            max: max + step * 2,
+            interval: step
+          };
+        }
+        const range = niceNum(max - min, false);
+        const interval = niceNum(range / 4, true);
+        const niceMin = Math.floor(min / interval) * interval;
+        const niceMax = Math.ceil(max / interval) * interval;
+        return { min: niceMin, max: niceMax, interval };
+      };
+      const buildChart = (id, data, unit) => {
+        const container = document.getElementById('chart-' + id);
+        if (!container || !data.length) return null;
+        const chart = echarts.init(container);
         const range = computeRange(data);
-        return new Chart(canvas, {
-          type: 'line',
-          data: {
-            datasets: [
-              {
-                data,
-                borderColor: '#d16a3a',
-                backgroundColor: 'rgba(209, 106, 58, 0.1)',
-                pointRadius: 3,
-                tension: 0.2
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: { label: tooltipForUnit(unit) }
-              }
-            },
-            scales: {
-              x: {
-                type: 'time',
-                min: range ? range.min : undefined,
-                max: range ? range.max : undefined,
-                time: { unit: 'month' },
-                ticks: {
-                  maxRotation: 0,
-                  autoSkip: true,
-                  callback: (value, index, ticks) => {
-                    if (index === 0 || index === ticks.length - 1) {
-                      return monthLabel(value);
-                    }
-                    return '';
-                  },
-                  font: { size: 12 }
+        const minX = range ? range.min : null;
+        const maxX = range ? range.max : null;
+        const scale = niceScale(data.map((point) => point.y));
+        chart.setOption({
+          grid: { left: 48, right: 16, top: 16, bottom: 28 },
+          xAxis: {
+            type: 'time',
+            min: minX,
+            max: maxX,
+            axisLabel: {
+              fontSize: 12,
+              formatter: (value) => {
+                if (value === minX || value === maxX) {
+                  return monthLabel(value);
                 }
-              },
-              y: {
-                ticks: {
-                  stepSize: step,
-                  font: { size: 12 }
-                }
+                return '';
               }
             }
-          }
+          },
+          yAxis: {
+            type: 'value',
+            min: scale.min,
+            max: scale.max,
+            interval: scale.interval,
+            axisLabel: { fontSize: 12 }
+          },
+          tooltip: {
+            trigger: 'axis',
+            formatter: (params) => {
+              const point = params[0];
+              const value = Number(point.data[1]).toFixed(1);
+              const unitText = unit ? ' ' + unit : '';
+              return dateLabel(point.data[0]) + ': ' + value + unitText;
+            }
+          },
+          series: [
+            {
+              type: 'line',
+              data: data.map((point) => [point.x, point.y]),
+              smooth: 0.2,
+              showSymbol: true,
+              symbolSize: 6,
+              lineStyle: { color: '#d16a3a', width: 2 },
+              itemStyle: { color: '#1c1b1a' }
+            }
+          ]
         });
+        return chart;
       };
       const initToggleChart = (id) => {
         const button = document.querySelector('[data-chart-toggle=\"' + id + '\"]');
         if (!button) return;
         let mode = 'metric';
-        let chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, unitConfig[id][mode].step);
+        let chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit);
         button.textContent = unitConfig[id][mode].unit;
         button.addEventListener('click', () => {
           mode = mode === 'metric' ? 'imperial' : 'metric';
           button.textContent = unitConfig[id][mode].unit;
           if (!chart) {
-            chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit, unitConfig[id][mode].step);
+            chart = buildChart(id, chartPayload[id][mode], unitConfig[id][mode].unit);
             return;
           }
-          chart.data.datasets[0].data = chartPayload[id][mode];
-          chart.options.scales.y.ticks.stepSize = unitConfig[id][mode].step;
-          const range = computeRange(chartPayload[id][mode]);
-          chart.options.scales.x.min = range ? range.min : undefined;
-          chart.options.scales.x.max = range ? range.max : undefined;
-          chart.options.plugins.tooltip.callbacks.label = tooltipForUnit(unitConfig[id][mode].unit);
-          chart.update();
+          const scale = niceScale(chartPayload[id][mode].map((point) => point.y));
+          chart.setOption({
+            yAxis: { min: scale.min, max: scale.max, interval: scale.interval },
+            series: [
+              {
+                data: chartPayload[id][mode].map((point) => [point.x, point.y])
+              }
+            ]
+          });
+        });
+        window.addEventListener('resize', () => {
+          if (chart) chart.resize();
         });
       };
       window.addEventListener('load', () => {
         if (chartPayload.weight.metric.length) initToggleChart('weight');
         if (chartPayload.height.metric.length) initToggleChart('height');
-        if (chartPayload.bmi.length) buildChart('bmi', chartPayload.bmi, unitConfig.bmi.unit, unitConfig.bmi.step);
-        if (chartPayload.percentile.length) buildChart('percentile', chartPayload.percentile, unitConfig.percentile.unit, unitConfig.percentile.step);
+        if (chartPayload.bmi.length) buildChart('bmi', chartPayload.bmi, unitConfig.bmi.unit);
+        if (chartPayload.percentile.length) buildChart('percentile', chartPayload.percentile, unitConfig.percentile.unit);
       });
     </script>
   `;

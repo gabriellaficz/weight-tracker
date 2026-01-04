@@ -276,7 +276,8 @@ select {
   align-items: center;
 }
 
-.chart-card canvas {
+.chart-card canvas,
+.chart-card .chart-body {
   width: 100%;
   height: 220px;
 }
