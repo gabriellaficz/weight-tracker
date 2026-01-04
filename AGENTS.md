@@ -79,25 +79,25 @@ This *implied assent* is the default case.
 
 ---
 
-## Web Stack (Framework‑Agnostic Placeholder)
+## Web Stack
 
-**NOTE:** The exact web framework (e.g. Next.js / React) will be chosen later. Until then:
+- Framework: **Express 4.19** (server-rendered HTML)
+- Database: **SQLite** via `better-sqlite3`
+- Tests: **node:test** + `supertest`
 
-- Codex must use a **mainstream, well‑documented Node.js web framework** it fully understands
-- The framework must support:
-  - Server‑side rendering or simple server routing
-  - SQLite
-  - Automated testing
-
-**Node version:** **Node.js 22 LTS** (installed via apt or official NodeSource)
+**Node version:** **Node.js 22 LTS**
 
 Package manager: **npm**
 
-Once a framework is selected, Codex must update this section with:
+App entrypoints:
 
-- Framework name and version
-- App entrypoints
-- Build and run commands
+- `src/server.js` (HTTP server)
+- `src/app.js` (Express app + routes)
+
+Commands:
+
+- `npm start` (run server)
+- `npm test` (light tests)
 
 ---
 
