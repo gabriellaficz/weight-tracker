@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Broken bathroom scale">
+  <rect x="6" y="10" width="52" height="48" rx="8" fill="#f1eee8" stroke="#1b1b1b" stroke-width="3" />
+  <rect x="16" y="18" width="32" height="18" rx="4" fill="#ffffff" stroke="#1b1b1b" stroke-width="2" />
+  <circle cx="32" cy="27" r="6" fill="none" stroke="#1b1b1b" stroke-width="2" />
+  <line x1="32" y1="27" x2="38" y2="23" stroke="#1b1b1b" stroke-width="2" stroke-linecap="round" />
+  <path d="M22 40 L30 34 L28 44 L36 38 L34 50" fill="none" stroke="#1b1b1b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
