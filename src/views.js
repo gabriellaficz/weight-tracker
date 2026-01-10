@@ -823,6 +823,60 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       };
       const combinedDates = chartPayload.weight.metric.concat(chartPayload.height.metric);
       const globalRange = combinedDates.length ? computeRange(combinedDates) : null;
+      const buildSmoothedSeries = (data, minX, maxX, count = 10) => {
+        if (!data.length || minX == null || maxX == null) return null;
+        if (data.length === 1) {
+          return Array.from({ length: count }, (_, idx) => {
+            const x = minX + ((maxX - minX) * idx) / (count - 1);
+            return [x, data[0].y];
+          });
+        }
+        const sorted = data.slice().sort((a, b) => a.x - b.x);
+        const span = maxX - minX;
+        const bandwidth = Math.max(span * 0.3, 24 * 60 * 60 * 1000);
+        const result = [];
+        for (let i = 0; i < count; i += 1) {
+          const x0 = minX + (span * i) / (count - 1);
+          let sumW = 0;
+          let sumWX = 0;
+          let sumWY = 0;
+          let sumWXX = 0;
+          let sumWXY = 0;
+          let nearest = null;
+          let nearestDist = Infinity;
+          for (const point of sorted) {
+            const dx = point.x - x0;
+            const dist = Math.abs(dx);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearest = point;
+            }
+            if (dist > bandwidth) continue;
+            const u = dist / bandwidth;
+            const w = Math.pow(1 - Math.pow(u, 3), 3);
+            sumW += w;
+            sumWX += w * point.x;
+            sumWY += w * point.y;
+            sumWXX += w * point.x * point.x;
+            sumWXY += w * point.x * point.y;
+          }
+          if (sumW === 0 || !Number.isFinite(sumW)) {
+            result.push([x0, nearest ? nearest.y : null]);
+            continue;
+          }
+          const denom = sumW * sumWXX - sumWX * sumWX;
+          let yHat;
+          if (Math.abs(denom) < 1e-12) {
+            yHat = sumWY / sumW;
+          } else {
+            const slope = (sumW * sumWXY - sumWX * sumWY) / denom;
+            const intercept = (sumWY - slope * sumWX) / sumW;
+            yHat = intercept + slope * x0;
+          }
+          result.push([x0, yHat]);
+        }
+        return result;
+      };
       const buildChart = (id, data, unit, rangeOverride) => {
         const container = document.getElementById('chart-' + id);
         if (!container || !data.length) return null;
@@ -849,6 +903,10 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           scale = niceScale([range.min, range.max], { minFloor: 0 });
         }
         const decimals = Math.max(0, Math.ceil(-Math.log10(scale.interval)));
+        const smoothed =
+          id === 'weight' || id === 'height'
+            ? buildSmoothedSeries(data, minX, maxX)
+            : null;
         chart.setOption({
           grid: { left: 48, right: 16, top: 16, bottom: 28 },
           xAxis: {
@@ -919,7 +977,18 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
                     }
                   }
                 : {})
-            }
+            },
+            ...(smoothed
+              ? [
+                  {
+                    type: 'line',
+                    data: smoothed,
+                    smooth: 0,
+                    showSymbol: false,
+                    lineStyle: { color: '#6b7280', width: 2, type: 'dashed' }
+                  }
+                ]
+              : [])
           ]
         });
         return chart;
@@ -949,6 +1018,14 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             scale = niceScale([range.min, range.max], { minFloor: 0 });
           }
           const decimals = Math.max(0, Math.ceil(-Math.log10(scale.interval)));
+          const smoothed =
+            id === 'weight' || id === 'height'
+              ? buildSmoothedSeries(
+                  chartPayload[id][mode],
+                  globalRange ? globalRange.min : null,
+                  globalRange ? globalRange.max : null
+                )
+              : null;
           chart.setOption({
             xAxis: {
               min: globalRange ? globalRange.min : undefined,
@@ -975,7 +1052,14 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             series: [
               {
                 data: chartPayload[id][mode].map((point) => [point.x, point.y])
-              }
+              },
+              ...(smoothed
+                ? [
+                    {
+                      data: smoothed
+                    }
+                  ]
+                : [])
             ]
           });
         });
