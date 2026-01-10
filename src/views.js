@@ -1,3 +1,5 @@
+import { getLmsTables } from "./bmi.js";
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -273,6 +275,7 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
     x: point.x,
     y: point.value
   }));
+  const lmsTables = getLmsTables();
   const entryRows = entries
     .map((entry) => {
       const bmiText = entry.bmi ? entry.bmi.toFixed(1) : "-";
@@ -608,6 +611,12 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         bmi: ${JSON.stringify(bmiData)},
         percentile: ${JSON.stringify(percentileData)}
       };
+      const profileInfo = {
+        birthMonth: ${profile?.birth_month ?? "null"},
+        birthYear: ${profile?.birth_year ?? "null"},
+        gender: ${JSON.stringify(profile?.gender ?? null)}
+      };
+      const lmsTables = ${JSON.stringify(lmsTables)};
       const unitConfig = {
         weight: { metric: { unit: 'kg', step: 1 }, imperial: { unit: 'lb', step: 1 } },
         height: { metric: { unit: 'cm', step: 10 }, imperial: { unit: 'in', step: 6 } },
@@ -624,6 +633,73 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
         const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
         const day = String(date.getUTCDate()).padStart(2, '0');
         return year + '-' + month + '-' + day;
+      };
+      const ageInMonthsAt = (value) => {
+        if (!profileInfo.birthYear || !profileInfo.birthMonth) return null;
+        const entry = new Date(value);
+        if (Number.isNaN(entry.getTime())) return null;
+        const birth = new Date(Date.UTC(profileInfo.birthYear, profileInfo.birthMonth - 1, 15));
+        const years = entry.getUTCFullYear() - birth.getUTCFullYear();
+        const months = entry.getUTCMonth() - birth.getUTCMonth();
+        const total = years * 12 + months;
+        return total + (entry.getUTCDate() >= 15 ? 0.5 : 0);
+      };
+      const interpolateRow = (rows, age) => {
+        if (!rows || !rows.length) return null;
+        if (age <= rows[0].age) return rows[0];
+        if (age >= rows[rows.length - 1].age) return rows[rows.length - 1];
+        let left = 0;
+        let right = rows.length - 1;
+        while (left <= right) {
+          const mid = Math.floor((left + right) / 2);
+          const value = rows[mid].age;
+          if (value === age) return rows[mid];
+          if (value < age) left = mid + 1;
+          else right = mid - 1;
+        }
+        const lower = rows[right];
+        const upper = rows[left];
+        const span = upper.age - lower.age;
+        const ratio = span === 0 ? 0 : (age - lower.age) / span;
+        return {
+          age,
+          l: lower.l + (upper.l - lower.l) * ratio,
+          m: lower.m + (upper.m - lower.m) * ratio,
+          s: lower.s + (upper.s - lower.s) * ratio
+        };
+      };
+      const erf = (x) => {
+        const sign = x < 0 ? -1 : 1;
+        const absX = Math.abs(x);
+        const t = 1 / (1 + 0.3275911 * absX);
+        const a1 = 0.254829592;
+        const a2 = -0.284496736;
+        const a3 = 1.421413741;
+        const a4 = -1.453152027;
+        const a5 = 1.061405429;
+        const poly =
+          (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t);
+        const approx = 1 - poly * Math.exp(-absX * absX);
+        return sign * approx;
+      };
+      const normalCdf = (z) => 0.5 * (1 + erf(z / Math.SQRT2));
+      const bmiPercentileFromTables = (bmi, ageMonths, gender) => {
+        if (!bmi || !ageMonths || !gender) return null;
+        const sex = gender === 'male' ? 1 : gender === 'female' ? 2 : null;
+        if (!sex || !lmsTables || !lmsTables[sex]) return null;
+        const row = interpolateRow(lmsTables[sex], ageMonths);
+        if (!row) return null;
+        const l = row.l;
+        const m = row.m;
+        const s = row.s;
+        const z = l === 0 ? Math.log(bmi / m) / s : (Math.pow(bmi / m, l) - 1) / (l * s);
+        return normalCdf(z) * 100;
+      };
+      const bmiFromMetric = (kg, cm) => {
+        if (kg == null || cm == null) return null;
+        const meters = cm / 100;
+        if (!meters) return null;
+        return kg / (meters * meters);
       };
       const computeRange = (data) => {
         if (!data.length) return null;
@@ -695,7 +771,9 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           rangeEnd = quarterEnd(max);
         }
 
-        return { min: rangeStart, max: rangeEnd };
+        const spanRange = rangeEnd - rangeStart;
+        const extendedEnd = rangeEnd + spanRange * 0.15;
+        return { min: rangeStart, max: extendedEnd };
       };
       const niceNum = (range, round) => {
         const exponent = Math.floor(Math.log10(range));
@@ -823,6 +901,90 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
       };
       const combinedDates = chartPayload.weight.metric.concat(chartPayload.height.metric);
       const globalRange = combinedDates.length ? computeRange(combinedDates) : null;
+      const buildSmoothedSeries = (data, minX, maxX, count = 10) => {
+        if (!data.length || minX == null || maxX == null) return null;
+        if (data.length === 1) {
+          return Array.from({ length: count }, (_, idx) => {
+            const x = minX + ((maxX - minX) * idx) / (count - 1);
+            return [x, data[0].y];
+          });
+        }
+        const sorted = data.slice().sort((a, b) => a.x - b.x);
+        const span = maxX - minX;
+        const bandwidth = Math.max(span * 0.3, 24 * 60 * 60 * 1000);
+        const result = [];
+        for (let i = 0; i < count; i += 1) {
+          const x0 = minX + (span * i) / (count - 1);
+          let sumW = 0;
+          let sumWX = 0;
+          let sumWY = 0;
+          let sumWXX = 0;
+          let sumWXY = 0;
+          let nearest = null;
+          let nearestDist = Infinity;
+          for (const point of sorted) {
+            const dx = point.x - x0;
+            const dist = Math.abs(dx);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearest = point;
+            }
+            if (dist > bandwidth) continue;
+            const u = dist / bandwidth;
+            const w = Math.pow(1 - Math.pow(u, 3), 3);
+            sumW += w;
+            sumWX += w * point.x;
+            sumWY += w * point.y;
+            sumWXX += w * point.x * point.x;
+            sumWXY += w * point.x * point.y;
+          }
+          if (sumW === 0 || !Number.isFinite(sumW)) {
+            result.push([x0, nearest ? nearest.y : null]);
+            continue;
+          }
+          const denom = sumW * sumWXX - sumWX * sumWX;
+          let yHat;
+          if (Math.abs(denom) < 1e-12) {
+            yHat = sumWY / sumW;
+          } else {
+            const slope = (sumW * sumWXY - sumWX * sumWY) / denom;
+            const intercept = (sumWY - slope * sumWX) / sumW;
+            yHat = intercept + slope * x0;
+          }
+          result.push([x0, yHat]);
+        }
+        return result;
+      };
+      const buildSmoothedBmiSeries = (minX, maxX) => {
+        const smoothedWeight = buildSmoothedSeries(chartPayload.weight.metric, minX, maxX);
+        const smoothedHeight = buildSmoothedSeries(chartPayload.height.metric, minX, maxX);
+        if (!smoothedWeight || !smoothedHeight) return null;
+        const result = [];
+        for (let i = 0; i < smoothedWeight.length; i += 1) {
+          const x = smoothedWeight[i][0];
+          const bmi = bmiFromMetric(smoothedWeight[i][1], smoothedHeight[i][1]);
+          if (bmi == null || !Number.isFinite(bmi)) continue;
+          result.push([x, bmi]);
+        }
+        return result.length ? result : null;
+      };
+      const buildSmoothedPercentileSeries = (minX, maxX) => {
+        const smoothedBmi = buildSmoothedBmiSeries(minX, maxX);
+        if (!smoothedBmi) return null;
+        const result = [];
+        for (const [x, bmi] of smoothedBmi) {
+          const ageMonths = ageInMonthsAt(x);
+          if (ageMonths == null || ageMonths < 24) continue;
+          const percentile = bmiPercentileFromTables(
+            bmi,
+            Math.min(ageMonths, 240),
+            profileInfo.gender
+          );
+          if (percentile == null || !Number.isFinite(percentile)) continue;
+          result.push([x, percentile]);
+        }
+        return result.length ? result : null;
+      };
       const buildChart = (id, data, unit, rangeOverride) => {
         const container = document.getElementById('chart-' + id);
         if (!container || !data.length) return null;
@@ -849,6 +1011,16 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
           scale = niceScale([range.min, range.max], { minFloor: 0 });
         }
         const decimals = Math.max(0, Math.ceil(-Math.log10(scale.interval)));
+        const smoothed =
+          id === 'weight' || id === 'height'
+            ? buildSmoothedSeries(data, minX, maxX)
+            : null;
+        const smoothedDerived =
+          id === 'bmi'
+            ? buildSmoothedBmiSeries(minX, maxX)
+            : id === 'percentile'
+              ? buildSmoothedPercentileSeries(minX, maxX)
+              : null;
         chart.setOption({
           grid: { left: 48, right: 16, top: 16, bottom: 28 },
           xAxis: {
@@ -919,7 +1091,29 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
                     }
                   }
                 : {})
-            }
+            },
+            ...(smoothed
+              ? [
+                  {
+                    type: 'line',
+                    data: smoothed,
+                    smooth: 0,
+                    showSymbol: false,
+                    lineStyle: { color: '#6b7280', width: 2, type: 'dashed' }
+                  }
+                ]
+              : []),
+            ...(smoothedDerived
+              ? [
+                  {
+                    type: 'line',
+                    data: smoothedDerived,
+                    smooth: 0,
+                    showSymbol: false,
+                    lineStyle: { color: '#6b7280', width: 2, type: 'dashed' }
+                  }
+                ]
+              : [])
           ]
         });
         return chart;
@@ -949,6 +1143,14 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             scale = niceScale([range.min, range.max], { minFloor: 0 });
           }
           const decimals = Math.max(0, Math.ceil(-Math.log10(scale.interval)));
+          const smoothed =
+            id === 'weight' || id === 'height'
+              ? buildSmoothedSeries(
+                  chartPayload[id][mode],
+                  globalRange ? globalRange.min : null,
+                  globalRange ? globalRange.max : null
+                )
+              : null;
           chart.setOption({
             xAxis: {
               min: globalRange ? globalRange.min : undefined,
@@ -975,7 +1177,18 @@ function profileView({ user, profileUser, profile, entries, stats, isOwner }) {
             series: [
               {
                 data: chartPayload[id][mode].map((point) => [point.x, point.y])
-              }
+              },
+              ...(smoothed
+                ? [
+                    {
+                      type: 'line',
+                      data: smoothed,
+                      smooth: 0,
+                      showSymbol: false,
+                      lineStyle: { color: '#6b7280', width: 2, type: 'dashed' }
+                    }
+                  ]
+                : [])
             ]
           });
         });

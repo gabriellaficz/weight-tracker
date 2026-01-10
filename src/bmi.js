@@ -42,6 +42,10 @@ function loadTables() {
   return tables;
 }
 
+export function getLmsTables() {
+  return loadTables();
+}
+
 function interpolateRow(rows, age) {
   if (!rows.length) return null;
   if (age <= rows[0].age) return rows[0];
