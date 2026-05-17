@@ -6,8 +6,8 @@ Entry dates use `YYYY-MMM-DD` (example: `2025-Jan-04`).
 
 ## Stack
 
-- Node.js 22 + Express
-- SQLite (better-sqlite3)
+- Node.js v24.12.0 + Express
+- SQLite (`sqlite` + `sqlite3`)
 - Server-rendered HTML
 
 ## Data location
@@ -49,7 +49,12 @@ npm test
 
 ## Systemd + Nginx (production)
 
-Systemd unit and Nginx site are configured on the server. The app listens on port 3000 behind Nginx.
+Systemd unit and Nginx site are configured on the server.
+
+- Service: `weight-tracker.service`
+- App listen port: `3000` (proxied by Nginx)
+- Public host: `https://bmi.appx.ro`
+- Secrets file: `/home/ubuntu/app_data/secrets.env`
 
 ## Backups
 
@@ -65,7 +70,7 @@ Restore:
 ```
 cd /home/ubuntu
 sudo tar -xzf app_backup.tgz
-sudo systemctl restart weight-tracker
+sudo systemctl restart weight-tracker.service
 ```
 
 ## Data source

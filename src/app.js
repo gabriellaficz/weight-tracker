@@ -16,6 +16,7 @@ import { homeView, loginView, registerView, profileView } from "./views.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SESSION_DAYS = 30;
+const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "session_id";
 
 function nowIso() {
   return new Date().toISOString();
@@ -274,7 +275,7 @@ export async function createApp() {
 
   app.use(
     asyncHandler(async (req, res, next) => {
-      const sessionId = req.cookies.session_id;
+      const sessionId = req.cookies[SESSION_COOKIE_NAME];
       if (!sessionId) {
         req.user = null;
         return next();
@@ -284,13 +285,13 @@ export async function createApp() {
         sessionId
       );
       if (!session) {
-        res.clearCookie("session_id");
+        res.clearCookie(SESSION_COOKIE_NAME);
         req.user = null;
         return next();
       }
       if (new Date(session.expires_at) < new Date()) {
         await db.run("DELETE FROM sessions WHERE id = ?", sessionId);
-        res.clearCookie("session_id");
+        res.clearCookie(SESSION_COOKIE_NAME);
         req.user = null;
         return next();
       }
@@ -400,7 +401,7 @@ export async function createApp() {
         [sessionId, userId, createdAt, expiresAt]
       );
 
-      res.cookie("session_id", sessionId, {
+      res.cookie(SESSION_COOKIE_NAME, sessionId, {
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.COOKIE_SECURE === "true",
@@ -436,7 +437,7 @@ export async function createApp() {
         [sessionId, user.id, createdAt, expiresAt]
       );
 
-      res.cookie("session_id", sessionId, {
+      res.cookie(SESSION_COOKIE_NAME, sessionId, {
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.COOKIE_SECURE === "true",
@@ -450,10 +451,10 @@ export async function createApp() {
   app.post(
     "/logout",
     asyncHandler(async (req, res) => {
-      const sessionId = req.cookies.session_id;
+      const sessionId = req.cookies[SESSION_COOKIE_NAME];
       if (sessionId) {
         await db.run("DELETE FROM sessions WHERE id = ?", sessionId);
-        res.clearCookie("session_id");
+        res.clearCookie(SESSION_COOKIE_NAME);
       }
       res.redirect("/");
     })
