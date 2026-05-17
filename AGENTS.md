@@ -32,16 +32,18 @@ Codex works **directly on the live production machine**. There is no staging env
 
 At startup, Codex must:
 
-1. Identify the active repository as the **only Git‑controlled directory** under `~`.
-2. Record the discovered repository path and name in this file.
+1. Identify the active repository for the current task.
+2. Record known Git-controlled repositories under `~` in this file.
 
 If Codex ever adds additional repositories or relocates the main repo, it must update this section.
 
 **Active repository:** `/home/ubuntu/weight-tracker` (weight-tracker)
 
-Additional host-level infrastructure folder (not a Git repo):
+Known repositories under `/home/ubuntu`:
 
-- `/home/ubuntu/platform-infra` (shared templates/scripts for multi-app systemd + Nginx onboarding)
+- `/home/ubuntu/weight-tracker` (production BMI tracker)
+- `/home/ubuntu/11plus` (new app scaffold on `11plus.appx.ro`)
+- `/home/ubuntu/platform-infra` (shared templates/scripts/runbooks for multi-app systemd + Nginx onboarding)
 
 ---
 
