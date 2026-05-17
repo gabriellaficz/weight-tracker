@@ -16,8 +16,9 @@ Persistent data lives outside the repo:
 
 ```
 /home/ubuntu/app_data/
-  secrets.env
-  app.sqlite
+  weight-tracker/
+    secrets.env
+    app.sqlite
 ```
 
 ## Setup
@@ -32,7 +33,8 @@ npm install
 
 ```
 mkdir -p /home/ubuntu/app_data
-node -e "console.log('SESSION_SECRET=' + require('crypto').randomBytes(32).toString('hex'))" > /home/ubuntu/app_data/secrets.env
+mkdir -p /home/ubuntu/app_data/weight-tracker
+node -e "console.log('SESSION_SECRET=' + require('crypto').randomBytes(32).toString('hex'))" > /home/ubuntu/app_data/weight-tracker/secrets.env
 ```
 
 3. Run locally:
@@ -54,7 +56,7 @@ Systemd unit and Nginx site are configured on the server.
 - Service: `weight-tracker.service`
 - App listen port: `3000` (proxied by Nginx)
 - Public host: `https://bmi.appx.ro`
-- Secrets file: `/home/ubuntu/app_data/secrets.env`
+- Secrets file: `/home/ubuntu/app_data/weight-tracker/secrets.env`
 
 Shared multi-app host automation is maintained in:
 

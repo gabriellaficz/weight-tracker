@@ -160,12 +160,13 @@ All non‑code state lives **outside the repo**.
 
 ```
 ~/app_data/
-  ├── secrets.env
-  └── app.sqlite
+  └── weight-tracker/
+      ├── secrets.env
+      └── app.sqlite
 ```
 
-- `secrets.env`: all passwords, API keys, tokens
-- `app.sqlite`: SQLite database file
+- `secrets.env`: all passwords, API keys, tokens (per-app subfolder)
+- `app.sqlite`: SQLite database file (per-app subfolder)
 
 Nothing secret may be committed to Git.
 
