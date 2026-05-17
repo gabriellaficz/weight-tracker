@@ -39,6 +39,10 @@ If Codex ever adds additional repositories or relocates the main repo, it must u
 
 **Active repository:** `/home/ubuntu/weight-tracker` (weight-tracker)
 
+Additional host-level infrastructure folder (not a Git repo):
+
+- `/home/ubuntu/platform-infra` (shared templates/scripts for multi-app systemd + Nginx onboarding)
+
 ---
 
 ## Git and Branching Rules
@@ -82,10 +86,10 @@ This *implied assent* is the default case.
 ## Web Stack
 
 - Framework: **Express 4.19** (server-rendered HTML)
-- Database: **SQLite** via `better-sqlite3`
+- Database: **SQLite** via `sqlite` + `sqlite3` packages
 - Tests: **node:test** + `supertest`
 
-**Node version:** **Node.js 22 LTS**
+**Node version (currently deployed):** **Node.js v24.12.0** (`/home/ubuntu/.nvm/versions/node/v24.12.0/bin/node`)
 
 Package manager: **npm**
 
@@ -110,6 +114,12 @@ Commands:
   - Start on boot
   - Restart on failure
   - Run as `ubuntu`
+- Active service: `weight-tracker.service`
+- Runtime environment:
+  - `PORT=3000`
+  - `APP_DATA_DIR=/home/ubuntu/app_data`
+  - `COOKIE_SECURE=true`
+  - `EnvironmentFile=/home/ubuntu/app_data/secrets.env`
 
 ### Reverse Proxy
 
@@ -168,6 +178,11 @@ Codex must be able to create a **single‑file backup** after each commit to ma
 Containing the entire `app_data/` directory.
 
 Restore must be documented and trivial (untar + restart service).
+Current restore command:
+
+```
+sudo systemctl restart weight-tracker.service
+```
 
 ---
 
