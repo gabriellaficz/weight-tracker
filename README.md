@@ -56,6 +56,10 @@ Systemd unit and Nginx site are configured on the server.
 - Public host: `https://bmi.appx.ro`
 - Secrets file: `/home/ubuntu/app_data/secrets.env`
 
+Shared multi-app host automation is maintained in:
+
+- `/home/ubuntu/platform-infra`
+
 ## Backups
 
 After each merge to main, create a backup:
