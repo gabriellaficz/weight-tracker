@@ -3,7 +3,7 @@ import path from "path";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
-const DEFAULT_DATA_DIR = "/home/ubuntu/app_data";
+const DEFAULT_DATA_DIR = "/home/ubuntu/app_data/weight-tracker";
 
 export function resolveDataDir() {
   return process.env.APP_DATA_DIR || DEFAULT_DATA_DIR;
